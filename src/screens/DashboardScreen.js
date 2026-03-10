@@ -1,11 +1,31 @@
-import React, { useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+} from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import { radius } from "../constants/theme";
+import { useThemeColors } from "../hooks/useThemeColors";
+import GradientBackdrop from "../components/GradientBackdrop";
+import SiriOrb from "../components/SiriOrb";
+import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
+import { Card } from "../../components/ui/card";
+import { Separator } from "../../components/ui/separator";
+import { useEnvironmentalContext } from "../hooks/useEnvironmentalContext";
+import { useLlmInsight } from "../hooks/useLlmInsight";
+import { formatRatioAsPercent, formatTime } from "../utils/format";
+import { buildInsightPrompt } from "../utils/insights";
+
+const UPDATE_INTERVAL_MS = 3000;
+const STRESS_THRESHOLD_HR = 95;
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const round1 = (value) => Math.round(value * 10) / 10;
 
-const initialData = {
+const createInitialData = () => ({
   timestamp: new Date().toISOString(),
   metrics: {
     hr_mean: 72,
@@ -16,12 +36,22 @@ const initialData = {
     state: "Relaxed",
     confidence: 0.85,
   },
-};
+});
 
 export default function DashboardScreen() {
   const navigation = useNavigation();
-  const [data, setData] = useState(initialData);
-  const lastStateRef = useRef(initialData.ml_prediction.state);
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const [data, setData] = useState(() => createInitialData());
+  const { data: envContext, loading: envLoading, error: envError, reload } =
+    useEnvironmentalContext();
+  const {
+    loading: llmLoading,
+    error: llmError,
+    response: llmResponse,
+    generate,
+    clear,
+  } = useLlmInsight({ system: "Keep the response under 80 words." });
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -41,7 +71,7 @@ export default function DashboardScreen() {
         }
 
         const tempDropped = nextTemp < prevTemp;
-        const stressed = nextHr > 95 && tempDropped;
+        const stressed = nextHr > STRESS_THRESHOLD_HR && tempDropped;
 
         const confidence = stressed
           ? 0.78 + Math.random() * 0.2
@@ -60,163 +90,322 @@ export default function DashboardScreen() {
           },
         };
       });
-    }, 3000);
+    }, UPDATE_INTERVAL_MS);
 
     return () => clearInterval(id);
   }, []);
 
-  useEffect(() => {
-    const nextState = data.ml_prediction.state;
-    if (nextState === "Stressed" && lastStateRef.current !== "Stressed") {
-      navigation.navigate("Intervention");
-    }
-    lastStateRef.current = nextState;
-  }, [data.ml_prediction.state, navigation]);
+  const handleStartBreathing = () => {
+    navigation.navigate("Intervention");
+  };
 
   const isStressed = data.ml_prediction.state === "Stressed";
-  const statusColors = isStressed
-    ? { card: "#3B1E16", accent: "#FF8A3D", text: "#FFE6D6" }
-    : { card: "#0E3A42", accent: "#37E3B2", text: "#E6FFFA" };
+  const statusColors = useMemo(() => {
+    return isStressed
+      ? {
+          card: colors.stressedCard,
+          accent: colors.warning,
+          text: colors.stressedText,
+        }
+      : {
+          card: colors.calmCard,
+          accent: colors.accent,
+          text: colors.calmText,
+        };
+  }, [isStressed, colors]);
+
+  const insightEvents = useMemo(
+    () => [
+      {
+        id: "state",
+        title: `State: ${data.ml_prediction.state}`,
+        duration: `Confidence ${formatRatioAsPercent(data.ml_prediction.confidence)}`,
+      },
+      {
+        id: "hr",
+        title: `Heart rate ${data.metrics.hr_mean} BPM`,
+        duration: `Skin temp ${data.metrics.temp_mean} C`,
+      },
+      {
+        id: "eda",
+        title: `EDA peaks ${data.metrics.eda_peaks}`,
+        duration: `Updated ${formatTime(data.timestamp)}`,
+      },
+    ],
+    [data]
+  );
+
+  const prompt = useMemo(
+    () => buildInsightPrompt(envContext, insightEvents),
+    [envContext, insightEvents]
+  );
+
+  const handleGenerate = () => {
+    if (!prompt || llmLoading) return;
+    generate(prompt);
+  };
+
+  const handleClear = () => {
+    clear();
+  };
+
+  const llmMessage = envLoading
+    ? "Fetching environment context..."
+    : envError
+    ? envError
+    : llmLoading
+    ? "Thinking..."
+    : llmError
+    ? llmError
+    : llmResponse
+    ? llmResponse
+    : "Tap Generate Insight to get a short, tailored suggestion.";
+
+  const llmMessageTone = envError || llmError ? "error" : "default";
 
   return (
-    <View style={styles.container}>
+    <View style={styles.screen}>
+      <GradientBackdrop />
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>Welcome back</Text>
           <Text style={styles.subtle}>MindPulse Dashboard</Text>
         </View>
         <View style={styles.statusRow}>
-          <View style={styles.connectedDot} />
-          <Text style={styles.statusText}>Watch Connected</Text>
+          <Badge variant="success">Watch Connected</Badge>
         </View>
       </View>
 
-      <View style={[styles.statusCard, { backgroundColor: statusColors.card }]}>
-        <Text style={[styles.statusLabel, { color: statusColors.text }]}>Current State</Text>
+      <Card style={[styles.statusCard, { backgroundColor: statusColors.card }]}>
+        <Text style={[styles.statusLabel, { color: statusColors.text }]}>
+          Current State
+        </Text>
         <Text style={[styles.statusValue, { color: statusColors.accent }]}>
           {data.ml_prediction.state}
         </Text>
         <Text style={[styles.confidence, { color: statusColors.text }]}>
-          Confidence {Math.round(data.ml_prediction.confidence * 100)}%
+          Confidence {formatRatioAsPercent(data.ml_prediction.confidence)}
         </Text>
-      </View>
+      </Card>
 
       <View style={styles.metricsRow}>
-        <View style={styles.metricCard}>
+        <Card style={styles.metricCard}>
           <Text style={styles.metricLabel}>Heart Rate</Text>
           <Text style={styles.metricValue}>{data.metrics.hr_mean} BPM</Text>
-        </View>
-        <View style={[styles.metricCard, styles.metricCardRight]}>
+        </Card>
+        <Card style={[styles.metricCard, styles.metricCardRight]}>
           <Text style={styles.metricLabel}>Skin Temp</Text>
           <Text style={styles.metricValue}>{data.metrics.temp_mean} C</Text>
-        </View>
+        </Card>
       </View>
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>
-          Last updated {new Date(data.timestamp).toLocaleTimeString()}
+          Last updated {formatTime(data.timestamp)}
         </Text>
       </View>
+
+      <Separator style={styles.separator} />
+
+      <Card style={styles.aiCard}>
+        <Text style={styles.aiTitle}>LLM Insight</Text>
+        <Text style={styles.aiSubtitle}>
+          Generates a short insight using your current state and environment data.
+        </Text>
+        <View style={styles.llmRow}>
+          <SiriOrb
+            size={70}
+            active={envLoading || llmLoading}
+          />
+          <View style={styles.chatBubble}>
+            <Text
+              style={[
+                styles.chatText,
+                llmMessageTone === "error" && styles.chatError,
+              ]}
+            >
+              {llmMessage}
+            </Text>
+            <View style={styles.chatTail} />
+          </View>
+        </View>
+        <View style={styles.aiActions}>
+          <Button
+            onPress={handleGenerate}
+            disabled={!envContext || llmLoading || envLoading}
+            loading={llmLoading}
+          >
+            Generate Insight
+          </Button>
+          {llmResponse ? (
+            <Button variant="outline" size="sm" onPress={handleClear}>
+              Clear
+            </Button>
+          ) : null}
+          {envError ? (
+            <Button variant="secondary" size="sm" onPress={reload}>
+              Retry Environment
+            </Button>
+          ) : null}
+        </View>
+      </Card>
+
+      <Button size="lg" onPress={handleStartBreathing} style={styles.breathingButton}>
+        Start Box Breathing
+      </Button>
+      </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#0B1F22",
-    paddingHorizontal: 20,
-    paddingTop: 54,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 20,
-  },
-  greeting: {
-    color: "#EAF6F6",
-    fontSize: 22,
-    fontWeight: "600",
-  },
-  subtle: {
-    color: "#88AEB2",
-    marginTop: 4,
-  },
-  statusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#0E2A2E",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#12363A",
-  },
-  connectedDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#37E3B2",
-    marginRight: 6,
-  },
-  statusText: {
-    color: "#D5F2F2",
-    fontSize: 12,
-  },
-  statusCard: {
-    borderRadius: 20,
-    padding: 22,
-    marginBottom: 22,
-    borderWidth: 1,
-    borderColor: "#12363A",
-  },
-  statusLabel: {
-    fontSize: 12,
-    textTransform: "uppercase",
-    letterSpacing: 1.1,
-    marginBottom: 6,
-  },
-  statusValue: {
-    fontSize: 32,
-    fontWeight: "700",
-    marginBottom: 6,
-  },
-  confidence: {
-    fontSize: 14,
-  },
-  metricsRow: {
-    flexDirection: "row",
-    marginBottom: 16,
-  },
-  metricCard: {
-    flex: 1,
-    backgroundColor: "#0E2A2E",
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#12363A",
-  },
-  metricCardRight: {
-    marginLeft: 12,
-  },
-  metricLabel: {
-    color: "#7AA5A5",
-    fontSize: 12,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    marginBottom: 8,
-  },
-  metricValue: {
-    color: "#EAF6F6",
-    fontSize: 20,
-    fontWeight: "600",
-  },
-  footer: {
-    marginTop: 6,
-  },
-  footerText: {
-    color: "#6F9BA0",
-    fontSize: 12,
-  },
-});
+const createStyles = (colors) =>
+  StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    container: {
+      flexGrow: 1,
+      paddingHorizontal: 20,
+      paddingTop: 54,
+      paddingBottom: 32,
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 20,
+    },
+    greeting: {
+      color: colors.textPrimary,
+      fontSize: 22,
+      fontWeight: "600",
+    },
+    subtle: {
+      color: colors.textMuted,
+      marginTop: 4,
+    },
+    statusRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: radius.md,
+    },
+    statusCard: {
+      padding: 22,
+      marginBottom: 22,
+    },
+    statusLabel: {
+      fontSize: 12,
+      textTransform: "uppercase",
+      letterSpacing: 1.1,
+      marginBottom: 6,
+    },
+    statusValue: {
+      fontSize: 32,
+      fontWeight: "700",
+      marginBottom: 6,
+    },
+    confidence: {
+      fontSize: 14,
+    },
+    metricsRow: {
+      flexDirection: "row",
+      marginBottom: 16,
+    },
+    metricCard: {
+      flex: 1,
+      padding: 16,
+    },
+    metricCardRight: {
+      marginLeft: 12,
+    },
+    metricLabel: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      textTransform: "uppercase",
+      letterSpacing: 0.8,
+      marginBottom: 8,
+    },
+    metricValue: {
+      color: colors.textPrimary,
+      fontSize: 20,
+      fontWeight: "600",
+    },
+    footer: {
+      marginTop: 6,
+    },
+    footerText: {
+      color: colors.textSubtle,
+      fontSize: 12,
+    },
+    separator: {
+      marginTop: 12,
+      marginBottom: 12,
+      opacity: 0.6,
+    },
+    aiCard: {
+      padding: 16,
+      marginTop: 18,
+      marginBottom: 12,
+    },
+    aiTitle: {
+      color: colors.textPrimary,
+      fontSize: 16,
+      fontWeight: "600",
+      marginBottom: 6,
+    },
+    aiSubtitle: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      marginBottom: 12,
+    },
+    llmRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 14,
+      marginBottom: 14,
+    },
+    chatBubble: {
+      flex: 1,
+      backgroundColor: colors.surfaceAlt,
+      borderRadius: radius.lg,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      position: "relative",
+    },
+    chatTail: {
+      position: "absolute",
+      left: -6,
+      top: 20,
+      width: 14,
+      height: 14,
+      backgroundColor: colors.surfaceAlt,
+      borderLeftWidth: 1,
+      borderBottomWidth: 1,
+      borderColor: colors.border,
+      transform: [{ rotate: "45deg" }],
+    },
+    chatText: {
+      color: colors.textPrimary,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    chatError: {
+      color: colors.warning,
+    },
+    aiActions: {
+      gap: 8,
+    },
+    breathingButton: {
+      marginTop: 18,
+      alignSelf: "stretch",
+    },
+  });

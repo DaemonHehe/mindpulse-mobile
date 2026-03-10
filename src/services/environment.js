@@ -2,6 +2,7 @@ import * as Location from "expo-location";
 
 const WEATHER_ENDPOINT = "https://api.open-meteo.com/v1/forecast";
 const AIR_QUALITY_ENDPOINT = "https://air-quality-api.open-meteo.com/v1/air-quality";
+const REQUEST_TIMEOUT_MS = 10000;
 
 const WEATHER_CODE_LABELS = {
   0: "Clear sky",
@@ -45,7 +46,30 @@ const pickPlaceLabel = (place) => {
   return [city, place.country].filter(Boolean).join(", ") || "Current location";
 };
 
+const toNumber = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const fetchWithTimeout = async (url, options = {}, timeoutMs = REQUEST_TIMEOUT_MS) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
 export async function getEnvironmentalContext() {
+  const servicesEnabled = await Location.hasServicesEnabledAsync();
+  if (!servicesEnabled) {
+    const error = new Error("Location services are disabled.");
+    error.code = "LOCATION_DISABLED";
+    throw error;
+  }
+
   const permission = await Location.requestForegroundPermissionsAsync();
   if (permission.status !== "granted") {
     const error = new Error("Location permission not granted.");
@@ -58,8 +82,13 @@ export async function getEnvironmentalContext() {
   });
 
   const { latitude, longitude } = position.coords;
-  const places = await Location.reverseGeocodeAsync({ latitude, longitude });
-  const place = places?.[0] || null;
+  let place = null;
+  try {
+    const places = await Location.reverseGeocodeAsync({ latitude, longitude });
+    place = places?.[0] || null;
+  } catch (error) {
+    place = null;
+  }
 
   const weatherUrl =
     `${WEATHER_ENDPOINT}?latitude=${latitude}` +
@@ -73,10 +102,21 @@ export async function getEnvironmentalContext() {
     "&current=pm2_5,pm10,us_aqi" +
     "&timezone=auto";
 
-  const [weatherRes, airRes] = await Promise.all([
-    fetch(weatherUrl),
-    fetch(airUrl),
-  ]);
+  let weatherRes;
+  let airRes;
+
+  try {
+    [weatherRes, airRes] = await Promise.all([
+      fetchWithTimeout(weatherUrl),
+      fetchWithTimeout(airUrl),
+    ]);
+  } catch (error) {
+    const message =
+      error?.name === "AbortError"
+        ? "Environment request timed out."
+        : "Failed to reach environment data provider.";
+    throw new Error(message);
+  }
 
   if (!weatherRes.ok) {
     throw new Error(`Weather request failed (${weatherRes.status}).`);
@@ -91,8 +131,11 @@ export async function getEnvironmentalContext() {
   const current = weatherJson.current || weatherJson.current_weather || {};
   const airCurrent = airJson.current || {};
 
-  const weatherCode =
+  const weatherCodeRaw =
     current.weather_code ?? current.weathercode ?? null;
+  const weatherCode = Number.isFinite(weatherCodeRaw)
+    ? weatherCodeRaw
+    : toNumber(weatherCodeRaw);
 
   return {
     location: {
@@ -101,10 +144,10 @@ export async function getEnvironmentalContext() {
       label: pickPlaceLabel(place),
     },
     weather: {
-      temperatureC: current.temperature_2m ?? current.temperature ?? null,
-      feelsLikeC: current.apparent_temperature ?? null,
-      humidityPercent: current.relative_humidity_2m ?? null,
-      windSpeed: current.wind_speed_10m ?? current.windspeed ?? null,
+      temperatureC: toNumber(current.temperature_2m ?? current.temperature),
+      feelsLikeC: toNumber(current.apparent_temperature),
+      humidityPercent: toNumber(current.relative_humidity_2m),
+      windSpeed: toNumber(current.wind_speed_10m ?? current.windspeed),
       weatherCode,
       weatherLabel:
         typeof weatherCode === "number"
@@ -112,9 +155,9 @@ export async function getEnvironmentalContext() {
           : "Unknown",
     },
     air: {
-      pm2_5: airCurrent.pm2_5 ?? null,
-      pm10: airCurrent.pm10 ?? null,
-      usAqi: airCurrent.us_aqi ?? null,
+      pm2_5: toNumber(airCurrent.pm2_5),
+      pm10: toNumber(airCurrent.pm10),
+      usAqi: toNumber(airCurrent.us_aqi),
     },
     meta: {
       timezone: weatherJson.timezone || airJson.timezone || null,

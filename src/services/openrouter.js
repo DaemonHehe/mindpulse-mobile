@@ -7,8 +7,25 @@ const OPENROUTER_REFERER =
   process.env.EXPO_PUBLIC_OPENROUTER_REFERER || "https://mindpulse.app";
 const OPENROUTER_TITLE =
   process.env.EXPO_PUBLIC_OPENROUTER_TITLE || "MindPulse";
+const REQUEST_TIMEOUT_MS = 15000;
 
-export async function askOpenRouter({ system, user }) {
+const fetchWithTimeout = async (url, options = {}, timeoutMs = REQUEST_TIMEOUT_MS) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+export async function askOpenRouter({
+  system,
+  user,
+  temperature = 0.4,
+  maxTokens = 260,
+}) {
   if (!OPENROUTER_API_KEY) {
     throw new Error(
       "Missing OpenRouter API key. Set EXPO_PUBLIC_OPENROUTER_API_KEY."
@@ -19,21 +36,30 @@ export async function askOpenRouter({ system, user }) {
   if (system) messages.push({ role: "system", content: system });
   if (user) messages.push({ role: "user", content: user });
 
-  const response = await fetch(OPENROUTER_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": OPENROUTER_REFERER,
-      "X-Title": OPENROUTER_TITLE,
-    },
-    body: JSON.stringify({
-      model: OPENROUTER_MODEL,
-      messages,
-      temperature: 0.4,
-      max_tokens: 260,
-    }),
-  });
+  let response;
+  try {
+    response = await fetchWithTimeout(OPENROUTER_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": OPENROUTER_REFERER,
+        "X-Title": OPENROUTER_TITLE,
+      },
+      body: JSON.stringify({
+        model: OPENROUTER_MODEL,
+        messages,
+        temperature,
+        max_tokens: maxTokens,
+      }),
+    });
+  } catch (error) {
+    const message =
+      error?.name === "AbortError"
+        ? "OpenRouter request timed out."
+        : "Failed to reach OpenRouter.";
+    throw new Error(message);
+  }
 
   const data = await response.json().catch(() => ({}));
 

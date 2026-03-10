@@ -1,11 +1,30 @@
 import React, { useMemo } from "react";
-import { View, StyleSheet } from "react-native";
+import { View, StyleSheet, Text } from "react-native";
 import { WebView } from "react-native-webview";
+import { radius } from "../constants/theme";
+import { useThemeColors, useThemeScheme } from "../hooks/useThemeColors";
 
-export default function LeafletMap({ latitude, longitude, height = 220 }) {
+export default function LeafletMap({
+  latitude,
+  longitude,
+  height = 220,
+  interactive = false,
+}) {
+  const colors = useThemeColors();
+  const scheme = useThemeScheme();
+  const isDark = scheme === "dark";
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const lat = Number(latitude);
+  const lon = Number(longitude);
+  const isValid = Number.isFinite(lat) && Number.isFinite(lon);
+
   const html = useMemo(() => {
-    const lat = Number(latitude);
-    const lon = Number(longitude);
+    const tileUrl = isDark
+      ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+      : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+    const tileAttribution = isDark
+      ? '&copy; OpenStreetMap contributors &copy; CARTO'
+      : "&copy; OpenStreetMap contributors";
 
     return `<!DOCTYPE html>
 <html>
@@ -25,10 +44,14 @@ export default function LeafletMap({ latitude, longitude, height = 220 }) {
       html, body, #map {
         height: 100%;
         margin: 0;
-        background: #0E2A2E;
+        background: ${colors.surface};
       }
       .leaflet-control-attribution {
         font-size: 10px;
+        color: ${colors.textSubtle};
+      }
+      .leaflet-control-attribution a {
+        color: ${colors.textSubtle};
       }
     </style>
   </head>
@@ -41,21 +64,29 @@ export default function LeafletMap({ latitude, longitude, height = 220 }) {
     ></script>
     <script>
       var map = L.map("map").setView([${lat}, ${lon}], 13);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      L.tileLayer("${tileUrl}", {
         maxZoom: 19,
-        attribution: "&copy; OpenStreetMap contributors"
+        attribution: "${tileAttribution}"
       }).addTo(map);
       L.circleMarker([${lat}, ${lon}], {
         radius: 6,
-        color: "#37E3B2",
+        color: "${colors.accent}",
         weight: 2,
-        fillColor: "#37E3B2",
+        fillColor: "${colors.accent}",
         fillOpacity: 0.6
       }).addTo(map);
     </script>
   </body>
 </html>`;
-  }, [latitude, longitude]);
+  }, [lat, lon, colors, isDark]);
+
+  if (!isValid) {
+    return (
+      <View style={[styles.container, styles.fallback, { height }]}>
+        <Text style={styles.fallbackText}>Location unavailable</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { height }]}>
@@ -63,22 +94,35 @@ export default function LeafletMap({ latitude, longitude, height = 220 }) {
         originWhitelist={["*"]}
         source={{ html }}
         style={styles.webview}
+        javaScriptEnabled
+        startInLoadingState
+        scrollEnabled={false}
+        pointerEvents={interactive ? "auto" : "none"}
       />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    width: "100%",
-    borderRadius: 16,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#12363A",
-    backgroundColor: "#0E2A2E",
-  },
-  webview: {
-    flex: 1,
-    backgroundColor: "transparent",
-  },
-});
+const createStyles = (colors) =>
+  StyleSheet.create({
+    container: {
+      width: "100%",
+      borderRadius: radius.md,
+      overflow: "hidden",
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    webview: {
+      flex: 1,
+      backgroundColor: "transparent",
+    },
+    fallback: {
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    fallbackText: {
+      color: colors.textMuted,
+      fontSize: 12,
+    },
+  });
