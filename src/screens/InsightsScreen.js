@@ -4,13 +4,13 @@ import {
   Text,
   StyleSheet,
   Dimensions,
-  ScrollView,
 } from "react-native";
 import { LineChart } from "react-native-chart-kit";
 import LeafletMap from "../components/LeafletMap";
-import { radius } from "../constants/theme";
+import { radius, spacing } from "../constants/theme";
 import { useThemeColors } from "../hooks/useThemeColors";
-import GradientBackdrop from "../components/GradientBackdrop";
+import { typography } from "../constants/typography";
+import Screen from "../components/Screen";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { Spinner } from "../../components/ui/spinner";
@@ -87,12 +87,7 @@ export default function InsightsScreen() {
   const aqiLabel = formatNumber(envContext?.air.usAqi, 0);
 
   return (
-    <View style={styles.screen}>
-      <GradientBackdrop />
-      <ScrollView
-        contentContainerStyle={styles.container}
-        showsVerticalScrollIndicator={false}
-      >
+    <Screen>
       <Text style={styles.title}>Weekly Stress</Text>
 
       <Card style={styles.chartCard}>
@@ -162,115 +157,97 @@ export default function InsightsScreen() {
           </>
         )}
       </Card>
-    </ScrollView>
-    </View>
+    </Screen>
   );
 }
 
 const createStyles = (colors) =>
   StyleSheet.create({
-    screen: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    container: {
-      flexGrow: 1,
-      paddingHorizontal: 20,
-      paddingTop: 54,
-      paddingBottom: 32,
-    },
     title: {
+      ...typography.title,
       color: colors.textPrimary,
-      fontSize: 22,
-      fontWeight: "600",
-      marginBottom: 16,
+      marginBottom: spacing.md,
     },
     chartCard: {
-      paddingVertical: 12,
-      paddingHorizontal: 8,
-      marginBottom: 20,
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.xs,
+      marginBottom: spacing.lg,
     },
     chart: {
       borderRadius: radius.md,
       alignSelf: "center",
     },
     sectionTitle: {
+      ...typography.subtitle,
       color: colors.textPrimary,
-      fontSize: 16,
-      fontWeight: "600",
-      marginBottom: 10,
+      marginBottom: spacing.sm,
     },
     eventCard: {
-      padding: 14,
-      marginBottom: 10,
+      padding: spacing.sm,
+      marginBottom: spacing.sm,
     },
     eventTitle: {
+      ...typography.bodyEmphasis,
       color: colors.textPrimary,
-      fontSize: 14,
-      fontWeight: "500",
-      marginBottom: 6,
+      marginBottom: spacing.xs,
     },
     eventDuration: {
+      ...typography.caption,
       color: colors.textSecondary,
-      fontSize: 12,
     },
     envCard: {
-      padding: 14,
-      marginBottom: 20,
+      padding: spacing.sm,
+      marginBottom: spacing.lg,
     },
     envStatus: {
+      ...typography.caption,
       color: colors.textMuted,
-      fontSize: 12,
     },
     envLoadingRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 8,
+      gap: spacing.xs,
     },
     envError: {
+      ...typography.caption,
       color: colors.warning,
-      fontSize: 12,
-      marginBottom: 10,
+      marginBottom: spacing.sm,
     },
     envLocation: {
+      ...typography.bodyEmphasis,
       color: colors.textPrimary,
-      fontSize: 14,
-      fontWeight: "600",
-      marginTop: 12,
-      marginBottom: 6,
+      marginTop: spacing.sm,
+      marginBottom: spacing.xs,
     },
     envSummary: {
+      ...typography.caption,
       color: colors.textSecondary,
-      fontSize: 12,
-      marginBottom: 10,
+      marginBottom: spacing.sm,
     },
     envRow: {
       flexDirection: "row",
       justifyContent: "space-between",
-      marginBottom: 8,
+      marginBottom: spacing.xs,
     },
     envItem: {
       flex: 1,
     },
     envLabel: {
+      ...typography.overline,
       color: colors.textSecondary,
-      fontSize: 11,
-      textTransform: "uppercase",
-      letterSpacing: 0.6,
-      marginBottom: 4,
+      marginBottom: spacing.xxs,
     },
     envValue: {
+      ...typography.bodyEmphasis,
       color: colors.textPrimary,
-      fontSize: 14,
-      fontWeight: "600",
     },
     envMeta: {
+      ...typography.captionSm,
       color: colors.textSubtle,
-      fontSize: 10,
-      marginTop: 2,
+      marginTop: spacing.xxs,
     },
     envSource: {
+      ...typography.captionSm,
       color: colors.textSubtle,
-      fontSize: 10,
     },
   });

@@ -2,6 +2,7 @@ import { Text } from './text';
 import { View } from './view';
 import { useColor } from '../../hooks/useColor';
 import { CORNERS } from '../../theme/globals';
+import { typography } from '../../src/constants/typography';
 import { TextStyle, ViewStyle } from 'react-native';
 
 type BadgeVariant =
@@ -63,8 +64,7 @@ export function Badge({
 
   const getTextStyle = (): TextStyle => {
     const baseTextStyle: TextStyle = {
-      fontSize: 15,
-      fontWeight: '500',
+      ...typography.captionEmphasis,
       textAlign: 'center',
     };
 

@@ -1,6 +1,7 @@
 import { Text } from './text';
 import { useColor } from '../../hooks/useColor';
-import { BORDER_RADIUS, CORNERS, FONT_SIZE } from '../../theme/globals';
+import { BORDER_RADIUS, CORNERS } from '../../theme/globals';
+import { typography } from '../../src/constants/typography';
 import React, { useEffect, useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, View, ViewStyle } from 'react-native';
 import Animated, {
@@ -46,17 +47,21 @@ interface SpinnerConfig {
 }
 
 // Configuration
+const baseFontSize = typography.caption.fontSize || 12;
+const smallFontSize = typography.captionSm.fontSize || 10;
+const largeFontSize = typography.body.fontSize || 14;
+
 const sizeConfig: Record<SpinnerSize, SpinnerConfig> = {
-  sm: { size: 16, iconSize: 16, fontSize: 12, gap: 6, thickness: 2 },
+  sm: { size: 16, iconSize: 16, fontSize: smallFontSize, gap: 6, thickness: 2 },
   default: {
     size: 24,
     iconSize: 24,
-    fontSize: FONT_SIZE,
+    fontSize: baseFontSize,
     gap: 8,
     thickness: 2,
   },
-  lg: { size: 32, iconSize: 32, fontSize: 16, gap: 10, thickness: 3 },
-  icon: { size: 24, iconSize: 24, fontSize: FONT_SIZE, gap: 8, thickness: 2 },
+  lg: { size: 32, iconSize: 32, fontSize: largeFontSize, gap: 10, thickness: 3 },
+  icon: { size: 24, iconSize: 24, fontSize: baseFontSize, gap: 8, thickness: 2 },
 };
 
 const speedConfig = {

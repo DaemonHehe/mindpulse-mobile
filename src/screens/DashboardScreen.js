@@ -1,14 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-} from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { radius } from "../constants/theme";
+import { radius, spacing } from "../constants/theme";
 import { useThemeColors } from "../hooks/useThemeColors";
-import GradientBackdrop from "../components/GradientBackdrop";
+import { typography } from "../constants/typography";
+import Screen from "../components/Screen";
 import SiriOrb from "../components/SiriOrb";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -164,12 +160,7 @@ export default function DashboardScreen() {
   const llmMessageTone = envError || llmError ? "error" : "default";
 
   return (
-    <View style={styles.screen}>
-      <GradientBackdrop />
-      <ScrollView
-        contentContainerStyle={styles.container}
-        showsVerticalScrollIndicator={false}
-      >
+    <Screen>
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>Welcome back</Text>
@@ -257,126 +248,108 @@ export default function DashboardScreen() {
       <Button size="lg" onPress={handleStartBreathing} style={styles.breathingButton}>
         Start Box Breathing
       </Button>
-      </ScrollView>
-    </View>
+    </Screen>
   );
 }
 
 const createStyles = (colors) =>
   StyleSheet.create({
-    screen: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    container: {
-      flexGrow: 1,
-      paddingHorizontal: 20,
-      paddingTop: 54,
-      paddingBottom: 32,
-    },
     header: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      marginBottom: 20,
+      marginBottom: spacing.lg,
     },
     greeting: {
+      ...typography.title,
       color: colors.textPrimary,
-      fontSize: 22,
-      fontWeight: "600",
     },
     subtle: {
+      ...typography.caption,
       color: colors.textMuted,
-      marginTop: 4,
+      marginTop: spacing.xxs,
     },
     statusRow: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: 10,
-      paddingVertical: 6,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
       borderRadius: radius.md,
     },
     statusCard: {
-      padding: 22,
-      marginBottom: 22,
+      padding: spacing.lg,
+      marginBottom: spacing.lg,
     },
     statusLabel: {
-      fontSize: 12,
-      textTransform: "uppercase",
-      letterSpacing: 1.1,
-      marginBottom: 6,
+      ...typography.overline,
+      marginBottom: spacing.xs,
     },
     statusValue: {
-      fontSize: 32,
-      fontWeight: "700",
-      marginBottom: 6,
+      ...typography.display,
+      marginBottom: spacing.xs,
     },
     confidence: {
-      fontSize: 14,
+      ...typography.bodyEmphasis,
     },
     metricsRow: {
       flexDirection: "row",
-      marginBottom: 16,
+      marginBottom: spacing.md,
     },
     metricCard: {
       flex: 1,
-      padding: 16,
+      padding: spacing.md,
     },
     metricCardRight: {
-      marginLeft: 12,
+      marginLeft: spacing.sm,
     },
     metricLabel: {
+      ...typography.overline,
       color: colors.textSecondary,
-      fontSize: 12,
-      textTransform: "uppercase",
-      letterSpacing: 0.8,
-      marginBottom: 8,
+      marginBottom: spacing.xs,
     },
     metricValue: {
+      ...typography.metric,
       color: colors.textPrimary,
-      fontSize: 20,
-      fontWeight: "600",
     },
     footer: {
-      marginTop: 6,
+      marginTop: spacing.xs,
     },
     footerText: {
+      ...typography.caption,
       color: colors.textSubtle,
-      fontSize: 12,
     },
     separator: {
-      marginTop: 12,
-      marginBottom: 12,
+      marginTop: spacing.sm,
+      marginBottom: spacing.sm,
       opacity: 0.6,
     },
     aiCard: {
-      padding: 16,
-      marginTop: 18,
-      marginBottom: 12,
+      padding: spacing.md,
+      marginTop: spacing.lg,
+      marginBottom: spacing.sm,
     },
     aiTitle: {
+      ...typography.subtitle,
       color: colors.textPrimary,
-      fontSize: 16,
-      fontWeight: "600",
-      marginBottom: 6,
+      marginBottom: spacing.xs,
     },
     aiSubtitle: {
+      ...typography.caption,
       color: colors.textSecondary,
-      fontSize: 12,
-      marginBottom: 12,
+      marginBottom: spacing.sm,
     },
     llmRow: {
       flexDirection: "row",
       alignItems: "flex-start",
-      gap: 14,
-      marginBottom: 14,
+      gap: spacing.md,
+      marginBottom: spacing.sm,
     },
     chatBubble: {
       flex: 1,
       backgroundColor: colors.surfaceAlt,
       borderRadius: radius.lg,
-      paddingVertical: 12,
-      paddingHorizontal: 14,
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
       borderWidth: 1,
       borderColor: colors.border,
       position: "relative",
@@ -394,18 +367,17 @@ const createStyles = (colors) =>
       transform: [{ rotate: "45deg" }],
     },
     chatText: {
+      ...typography.bodySm,
       color: colors.textPrimary,
-      fontSize: 13,
-      lineHeight: 18,
     },
     chatError: {
       color: colors.warning,
     },
     aiActions: {
-      gap: 8,
+      gap: spacing.xs,
     },
     breathingButton: {
-      marginTop: 18,
+      marginTop: spacing.lg,
       alignSelf: "stretch",
     },
   });

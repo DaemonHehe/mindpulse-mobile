@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { View, StyleSheet, Text } from "react-native";
 import { WebView } from "react-native-webview";
 import { radius } from "../constants/theme";
+import { typography } from "../constants/typography";
 import { useThemeColors, useThemeScheme } from "../hooks/useThemeColors";
 
 export default function LeafletMap({
@@ -122,7 +123,7 @@ const createStyles = (colors) =>
       justifyContent: "center",
     },
     fallbackText: {
+      ...typography.caption,
       color: colors.textMuted,
-      fontSize: 12,
     },
   });

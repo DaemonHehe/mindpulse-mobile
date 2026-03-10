@@ -7,8 +7,9 @@ import {
   Easing,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { radius } from "../constants/theme";
+import { radius, spacing } from "../constants/theme";
 import { useThemeColors, useThemeScheme } from "../hooks/useThemeColors";
+import { typography } from "../constants/typography";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 
@@ -108,25 +109,24 @@ const createStyles = (colors) =>
     },
     card: {
       borderRadius: radius.xl,
-      paddingVertical: 28,
-      paddingHorizontal: 22,
+      paddingVertical: spacing.xl,
+      paddingHorizontal: spacing.lg,
       alignItems: "center",
     },
     title: {
+      ...typography.title,
       color: colors.textPrimary,
-      fontSize: 22,
-      fontWeight: "600",
-      marginBottom: 6,
+      marginBottom: spacing.xs,
     },
     subtitle: {
+      ...typography.bodySm,
       color: colors.textSecondary,
-      fontSize: 13,
-      marginBottom: 24,
+      marginBottom: spacing.xl,
     },
     animationWrap: {
       alignItems: "center",
       justifyContent: "center",
-      marginBottom: 18,
+      marginBottom: spacing.lg,
       height: 200,
     },
     circle: {
@@ -137,19 +137,18 @@ const createStyles = (colors) =>
       borderColor: colors.accent,
     },
     phase: {
+      ...typography.titleSm,
       color: colors.textPrimary,
-      fontSize: 18,
-      fontWeight: "600",
-      marginTop: 18,
+      marginTop: spacing.lg,
     },
     timerRow: {
       flexDirection: "row",
       justifyContent: "space-between",
       width: "100%",
-      marginBottom: 20,
+      marginBottom: spacing.lg,
     },
     timerText: {
+      ...typography.caption,
       color: colors.textMuted,
-      fontSize: 12,
     },
   });

@@ -2,7 +2,8 @@ import { Icon, IconComponentProps } from './icon';
 import { ButtonSpinner, SpinnerVariant } from './spinner';
 import { Text } from './text';
 import { useColor } from '../../hooks/useColor';
-import { CORNERS, FONT_SIZE, HEIGHT } from '../../theme/globals';
+import { CORNERS, HEIGHT } from '../../theme/globals';
+import { typography } from '../../src/constants/typography';
 import * as Haptics from 'expo-haptics';
 import { forwardRef } from 'react';
 import {
@@ -136,8 +137,7 @@ export const Button = forwardRef<View, ButtonProps>(
 
     const getButtonTextStyle = (): TextStyle => {
       const baseTextStyle: TextStyle = {
-        fontSize: FONT_SIZE,
-        fontWeight: '500',
+        ...typography.bodyEmphasis,
       };
 
       switch (variant) {

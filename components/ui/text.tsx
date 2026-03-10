@@ -1,5 +1,5 @@
 import { useColor } from '../../hooks/useColor';
-import { FONT_SIZE } from '../../theme/globals';
+import { typography } from '../../src/constants/typography';
 import React, { forwardRef } from 'react';
 import {
   Text as RNText,
@@ -39,40 +39,34 @@ export const Text = forwardRef<RNText, TextProps>(
         case 'heading':
           return {
             ...baseStyle,
-            fontSize: 28,
-            fontWeight: '800',
+            ...typography.display,
           };
         case 'title':
           return {
             ...baseStyle,
-            fontSize: 24,
-            fontWeight: '700',
+            ...typography.title,
           };
         case 'subtitle':
           return {
             ...baseStyle,
-            fontSize: 19,
-            fontWeight: '600',
+            ...typography.subtitle,
           };
         case 'caption':
           return {
             ...baseStyle,
-            fontSize: FONT_SIZE,
-            fontWeight: '400',
+            ...typography.caption,
             color: mutedColor,
           };
         case 'link':
           return {
             ...baseStyle,
-            fontSize: FONT_SIZE,
-            fontWeight: '500',
+            ...typography.bodyEmphasis,
             textDecorationLine: 'underline',
           };
         default: // 'body'
           return {
             ...baseStyle,
-            fontSize: FONT_SIZE,
-            fontWeight: '400',
+            ...typography.body,
           };
       }
     };
