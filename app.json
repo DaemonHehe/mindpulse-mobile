@@ -12,8 +12,10 @@
     ],
     "ios": {
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "MindPulse uses your location to show local weather and air quality."
-      }
+        "NSLocationWhenInUseUsageDescription": "MindPulse uses your location to show local weather and air quality.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.daemonberg.mindpulse"
     },
     "android": {
       "permissions": [
@@ -23,6 +25,11 @@
         "ACCESS_COARSE_LOCATION"
       ],
       "package": "com.daemonberg.mindpulse"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "9dc58f8d-ce89-4d49-9bc0-258c81ff8e3f"
+      }
     }
   }
 }
