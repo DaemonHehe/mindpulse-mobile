@@ -10,3 +10,12 @@ pnpm-debug.log*
 .DS_Store
 .env
 .env.*
+.expo-shared/
+android/
+ios/
+*.apk
+*.aab
+*.ipa
+*.keystore
+*.jks
+*.iml

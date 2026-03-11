@@ -29,15 +29,23 @@ MindPulse is a minimalist Expo React Native app focused on stress awareness and 
 Create `.env` in the project root (already in `.gitignore`):
 ```
 EXPO_PUBLIC_OPENROUTER_API_KEY=YOUR_KEY
-EXPO_PUBLIC_OPENROUTER_MODEL=openrouter/free
+EXPO_PUBLIC_OPENROUTER_MODEL=z-ai/glm-4.5-air:free
 EXPO_PUBLIC_OPENROUTER_REFERER=https://mindpulse.app
 EXPO_PUBLIC_OPENROUTER_TITLE=MindPulse
+EXPO_PUBLIC_SUPABASE_URL=YOUR_SUPABASE_URL
+EXPO_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+EXPO_PUBLIC_SUPABASE_REDIRECT_URL=YOUR_PASSWORD_RESET_REDIRECT_URL
 ```
 
 **Notes**
 1. `EXPO_PUBLIC_*` variables are embedded in the client bundle. Use a server proxy for production secrets.
 2. Location permission is required for environmental context.
 3. Map tiles are fetched from OpenStreetMap (light) and CARTO (dark).
+
+**Supabase Setup**
+1. Create a Supabase project and copy the project URL + anon key into `.env`.
+2. Run the SQL in `supabase/schema.sql` to create the `profiles` table and policies.
+3. For password reset in mobile, set `EXPO_PUBLIC_SUPABASE_REDIRECT_URL` to your app scheme (for example: `mindpulse://reset`) and add the matching scheme in `app.json`.
 
 **Project Structure**
 1. `src/screens` — App screens

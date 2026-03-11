@@ -2,6 +2,7 @@
   "expo": {
     "name": "MindPulse",
     "slug": "mindpulse",
+    "scheme": "mindpulse",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
@@ -17,8 +18,11 @@
     "android": {
       "permissions": [
         "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
-      ]
+      ],
+      "package": "com.daemonberg.mindpulse"
     }
   }
 }

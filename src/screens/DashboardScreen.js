@@ -203,7 +203,7 @@ export default function DashboardScreen() {
       <Separator style={styles.separator} />
 
       <Card style={styles.aiCard}>
-        <Text style={styles.aiTitle}>LLM Insight</Text>
+        <Text style={styles.aiTitle}>Coach</Text>
         <Text style={styles.aiSubtitle}>
           Generates a short insight using your current state and environment data.
         </Text>
