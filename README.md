@@ -28,10 +28,6 @@ MindPulse is a minimalist Expo React Native app focused on stress awareness and 
 **Environment Variables**
 Create `.env` in the project root (already in `.gitignore`):
 ```
-EXPO_PUBLIC_OPENROUTER_API_KEY=YOUR_KEY
-EXPO_PUBLIC_OPENROUTER_MODEL=z-ai/glm-4.5-air:free
-EXPO_PUBLIC_OPENROUTER_REFERER=https://mindpulse.app
-EXPO_PUBLIC_OPENROUTER_TITLE=MindPulse
 EXPO_PUBLIC_SUPABASE_URL=YOUR_SUPABASE_URL
 EXPO_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 EXPO_PUBLIC_SUPABASE_REDIRECT_URL=YOUR_PASSWORD_RESET_REDIRECT_URL
@@ -44,8 +40,17 @@ EXPO_PUBLIC_SUPABASE_REDIRECT_URL=YOUR_PASSWORD_RESET_REDIRECT_URL
 
 **Supabase Setup**
 1. Create a Supabase project and copy the project URL + anon key into `.env`.
-2. Run the SQL in `supabase/schema.sql` to create the `profiles` table and policies.
+2. Run the SQL in `supabase/schema.sql` to create the `users`, `user_settings`, and related analytics tables with RLS policies.
 3. For password reset in mobile, set `EXPO_PUBLIC_SUPABASE_REDIRECT_URL` to your app scheme (for example: `mindpulse://reset`) and add the matching scheme in `app.json`.
+4. Deploy the Edge Function in `supabase/functions/openrouter-insight` and store the OpenRouter secret in Supabase, not in `EXPO_PUBLIC_*`.
+
+**Edge Function Setup**
+1. Set secrets for the function:
+   `supabase secrets set OPENROUTER_API_KEY=YOUR_KEY OPENROUTER_MODEL=stepfun/step-3.5-flash:free OPENROUTER_REFERER=https://mindpulse.app/ OPENROUTER_TITLE=MindPulse OPENROUTER_TIMEOUT_MS=60000 OPENROUTER_RETRY_BASE_MS=800 OPENROUTER_RETRY_COUNT=2`
+2. Deploy the function:
+   `supabase functions deploy openrouter-insight`
+3. For local function testing, copy `supabase/functions/.env.example` to `supabase/functions/.env` and run:
+   `supabase functions serve openrouter-insight --env-file supabase/functions/.env`
 
 **Project Structure**
 1. `src/screens` — App screens

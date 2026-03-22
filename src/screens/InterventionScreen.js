@@ -12,6 +12,8 @@ import { useThemeColors, useThemeScheme } from "../hooks/useThemeColors";
 import { typography } from "../constants/typography";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
+import { useAuth } from "../contexts/AuthContext";
+import db from "../services/db";
 
 const phases = ["Inhale", "Hold", "Exhale"];
 const PHASE_DURATION_MS = 4000;
@@ -24,8 +26,13 @@ export default function InterventionScreen() {
   const scheme = useThemeScheme();
   const isDark = scheme === "dark";
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const { user } = useAuth();
   const scale = useRef(new Animated.Value(SCALE_MIN)).current;
+  const startedAtRef = useRef(new Date());
+  const interventionIdRef = useRef(null);
   const [phase, setPhase] = useState(phases[0]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const inhale = Animated.timing(scale, {
@@ -54,6 +61,7 @@ export default function InterventionScreen() {
   }, [scale]);
 
   useEffect(() => {
+    startedAtRef.current = new Date();
     let index = 0;
     setPhase(phases[0]);
     const id = setInterval(() => {
@@ -63,6 +71,81 @@ export default function InterventionScreen() {
 
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const startInterventionSession = async () => {
+      if (!user?.id) return;
+
+      try {
+        const latestPrediction = await db.getLatestPrediction(user.id);
+        const draft = await db.insertIntervention({
+          user_id: user.id,
+          prediction_id: latestPrediction?.id ?? null,
+          started_at: startedAtRef.current.toISOString(),
+          completed_secs: 1,
+          trigger_type: "Manual",
+          user_feedback: null,
+        });
+
+        if (active) {
+          interventionIdRef.current = draft.id;
+        }
+      } catch (err) {
+        if (active) {
+          setError(err?.message || "Failed to start breathing session log.");
+        }
+      }
+    };
+
+    startInterventionSession();
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
+  const handleComplete = async () => {
+    if (saving) return;
+    if (!user?.id) {
+      setError("You must be signed in.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+
+    try {
+      const completedSecs = Math.max(
+        1,
+        Math.round((Date.now() - startedAtRef.current.getTime()) / 1000)
+      );
+
+      if (interventionIdRef.current) {
+        await db.updateIntervention(interventionIdRef.current, {
+          completed_secs: completedSecs,
+          user_feedback: "Better",
+        });
+      } else {
+        const latestPrediction = await db.getLatestPrediction(user.id);
+        await db.insertIntervention({
+          user_id: user.id,
+          prediction_id: latestPrediction?.id ?? null,
+          started_at: startedAtRef.current.toISOString(),
+          completed_secs: completedSecs,
+          trigger_type: "Manual",
+          user_feedback: "Better",
+        });
+      }
+
+      navigation.goBack();
+    } catch (err) {
+      setError(err?.message || "Failed to save breathing session.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <View style={styles.overlay}>
@@ -91,7 +174,9 @@ export default function InterventionScreen() {
           <Text style={styles.timerText}>4s exhale</Text>
         </View>
 
-        <Button onPress={() => navigation.goBack()} size="lg">
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <Button onPress={handleComplete} size="lg" loading={saving} disabled={saving}>
           I feel better
         </Button>
       </Card>
@@ -150,5 +235,11 @@ const createStyles = (colors) =>
     timerText: {
       ...typography.caption,
       color: colors.textMuted,
+    },
+    error: {
+      ...typography.caption,
+      color: colors.warning,
+      marginBottom: spacing.sm,
+      textAlign: "center",
     },
   });

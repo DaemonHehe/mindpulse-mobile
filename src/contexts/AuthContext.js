@@ -7,7 +7,7 @@
   useState,
 } from "react";
 import { Linking } from "react-native";
-import { supabase } from "../services/supabase";
+import { supabase, USER_PROFILE_FIELDS } from "../services/supabase";
 
 const AuthContext = createContext({
   session: null,
@@ -26,8 +26,6 @@ const AuthContext = createContext({
   refreshProfile: async () => {},
   clearRecovery: () => {},
 });
-
-const PROFILE_FIELDS = "id,email,full_name,created_at,updated_at";
 
 const parseParams = (url) => {
   if (!url) return {};
@@ -60,6 +58,16 @@ export function AuthProvider({ children }) {
 
   const user = session?.user ?? null;
 
+  const ensureUserSettings = useCallback(async (userId) => {
+    const { error } = await supabase
+      .from("user_settings")
+      .upsert({ user_id: userId }, { onConflict: "user_id" });
+
+    if (error) {
+      console.warn("[Supabase] Failed to initialize user settings", error.message);
+    }
+  }, []);
+
   const fetchProfile = useCallback(async (activeUser) => {
     if (!activeUser) {
       setProfile(null);
@@ -68,8 +76,8 @@ export function AuthProvider({ children }) {
 
     setProfileLoading(true);
     const { data, error } = await supabase
-      .from("profiles")
-      .select(PROFILE_FIELDS)
+      .from("users")
+      .select(USER_PROFILE_FIELDS)
       .eq("id", activeUser.id)
       .maybeSingle();
 
@@ -87,50 +95,64 @@ export function AuthProvider({ children }) {
       };
 
       const { data: created, error: createError } = await supabase
-        .from("profiles")
+        .from("users")
         .insert(payload)
-        .select(PROFILE_FIELDS)
+        .select(USER_PROFILE_FIELDS)
         .single();
 
-      setProfileLoading(false);
-
       if (createError) {
+        setProfileLoading(false);
         throw createError;
       }
 
+      await ensureUserSettings(activeUser.id);
+
+      setProfileLoading(false);
       setProfile(created);
       return created;
     }
 
+    await ensureUserSettings(activeUser.id);
     setProfile(data);
     setProfileLoading(false);
     return data;
-  }, []);
+  }, [ensureUserSettings]);
 
   useEffect(() => {
     let active = true;
 
     const hydrateSession = async () => {
-      const { data, error } = await supabase.auth.getSession();
-      if (!active) return;
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (!active) return;
 
-      if (error) {
-        console.warn("[Supabase] Failed to restore session", error.message);
-      }
-
-      setSession(data?.session ?? null);
-
-      if (data?.session?.user) {
-        try {
-          await fetchProfile(data.session.user);
-        } catch (err) {
-          console.warn("[Supabase] Failed to load profile", err.message);
+        if (error) {
+          console.warn("[Supabase] Failed to restore session", error.message);
         }
-      } else {
-        setProfile(null);
-      }
 
-      setInitializing(false);
+        const nextSession = data?.session ?? null;
+        setSession(nextSession);
+
+        if (nextSession?.user) {
+          fetchProfile(nextSession.user).catch((err) => {
+            console.warn("[Supabase] Failed to load profile", err.message);
+          });
+        } else {
+          setProfile(null);
+        }
+      } catch (err) {
+        if (!active) return;
+        console.warn(
+          "[Supabase] Unexpected session restore failure",
+          err?.message ?? String(err)
+        );
+        setSession(null);
+        setProfile(null);
+      } finally {
+        if (active) {
+          setInitializing(false);
+        }
+      }
     };
 
     hydrateSession();
@@ -139,6 +161,7 @@ export function AuthProvider({ children }) {
       async (event, nextSession) => {
         if (!active) return;
         setSession(nextSession ?? null);
+        setInitializing(false);
 
         if (event === "PASSWORD_RECOVERY") {
           setRecoveryActive(true);
@@ -216,10 +239,12 @@ export function AuthProvider({ children }) {
   }, []);
 
   const signUp = useCallback(async ({ email, password, fullName }) => {
+    const redirectTo = process.env.EXPO_PUBLIC_SUPABASE_REDIRECT_URL;
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        ...(redirectTo ? { emailRedirectTo: redirectTo } : {}),
         data: {
           full_name: fullName,
         },
@@ -275,10 +300,10 @@ export function AuthProvider({ children }) {
       };
 
       const { data, error } = await supabase
-        .from("profiles")
+        .from("users")
         .update(payload)
         .eq("id", user.id)
-        .select(PROFILE_FIELDS)
+        .select(USER_PROFILE_FIELDS)
         .single();
 
       if (error) {
@@ -297,7 +322,7 @@ export function AuthProvider({ children }) {
     }
 
     const { error } = await supabase
-      .from("profiles")
+      .from("users")
       .delete()
       .eq("id", user.id);
 

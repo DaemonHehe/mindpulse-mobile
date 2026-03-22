@@ -1,10 +1,10 @@
-﻿/**
+/**
  * Enhanced Supabase client with auth integration
  * Extends the base supabase client with MindPulse-specific auth flows
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, Session, AuthError, User } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -28,7 +28,7 @@ const authRedirectUrl = process.env.EXPO_PUBLIC_SUPABASE_REDIRECT_URL;
 export const USER_PROFILE_FIELDS =
   'id,email,full_name,baseline_hr_bpm,baseline_temp_c,created_at,updated_at';
 
-const syncUserData = async (user) => {
+const syncUserData = async (user: User | null | undefined): Promise<void> => {
   if (!user) return;
 
   const profilePayload = {
@@ -64,7 +64,7 @@ export const authService = {
   /**
    * Sign up new user and initialize their database records
    */
-  async signUp(email, password) {
+  async signUp(email: string, password: string): Promise<{ session: Session | null; error: AuthError | null }> {
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -84,14 +84,14 @@ export const authService = {
       return { session: data.session, error: null };
     } catch (error) {
       console.error('[Auth] Unexpected sign up error:', error);
-      return { session: null, error };
+      return { session: null, error: error as AuthError };
     }
   },
 
   /**
    * Sign in existing user
    */
-  async signIn(email, password) {
+  async signIn(email: string, password: string): Promise<{ session: Session | null; error: AuthError | null }> {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -110,14 +110,14 @@ export const authService = {
       return { session: data.session, error: null };
     } catch (error) {
       console.error('[Auth] Unexpected sign in error:', error);
-      return { session: null, error };
+      return { session: null, error: error as AuthError };
     }
   },
 
   /**
    * Sign out and clear session
    */
-  async signOut() {
+  async signOut(): Promise<{ error: AuthError | null }> {
     try {
       const { error } = await supabase.auth.signOut();
 
@@ -129,14 +129,14 @@ export const authService = {
       return { error: null };
     } catch (error) {
       console.error('[Auth] Unexpected sign out error:', error);
-      return { error };
+      return { error: error as AuthError };
     }
   },
 
   /**
    * Get current session
    */
-  async getSession() {
+  async getSession(): Promise<Session | null> {
     try {
       const { data, error } = await supabase.auth.getSession();
 
@@ -174,7 +174,7 @@ export const authService = {
   /**
    * Reset password via email
    */
-  async resetPassword(email) {
+  async resetPassword(email: string): Promise<{ error: AuthError | null }> {
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(
         email,
@@ -189,14 +189,14 @@ export const authService = {
       return { error: null };
     } catch (error) {
       console.error('[Auth] Unexpected reset password error:', error);
-      return { error };
+      return { error: error as AuthError };
     }
   },
 
   /**
    * Update password after reset
    */
-  async updatePassword(newPassword) {
+  async updatePassword(newPassword: string): Promise<{ error: AuthError | null }> {
     try {
       const { error } = await supabase.auth.updateUser({
         password: newPassword,
@@ -210,14 +210,14 @@ export const authService = {
       return { error: null };
     } catch (error) {
       console.error('[Auth] Unexpected update password error:', error);
-      return { error };
+      return { error: error as AuthError };
     }
   },
 
   /**
    * Listen to auth state changes
    */
-  onAuthStateChange(callback) {
+  onAuthStateChange(callback: (session: Session | null) => void) {
     return supabase.auth.onAuthStateChange((_event, session) => {
       callback(session);
     });

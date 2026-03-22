@@ -39,34 +39,34 @@ export const Text = forwardRef<RNText, TextProps>(
         case 'heading':
           return {
             ...baseStyle,
-            ...typography.display,
+            ...(typography.display as TextStyle),
           };
         case 'title':
           return {
             ...baseStyle,
-            ...typography.title,
+            ...(typography.title as TextStyle),
           };
         case 'subtitle':
           return {
             ...baseStyle,
-            ...typography.subtitle,
+            ...(typography.subtitle as TextStyle),
           };
         case 'caption':
           return {
             ...baseStyle,
-            ...typography.caption,
+            ...(typography.caption as TextStyle),
             color: mutedColor,
           };
         case 'link':
           return {
             ...baseStyle,
-            ...typography.bodyEmphasis,
+            ...(typography.bodyEmphasis as TextStyle),
             textDecorationLine: 'underline',
           };
         default: // 'body'
           return {
             ...baseStyle,
-            ...typography.body,
+            ...(typography.body as TextStyle),
           };
       }
     };
@@ -78,3 +78,5 @@ export const Text = forwardRef<RNText, TextProps>(
     );
   }
 );
+
+Text.displayName = 'Text';

@@ -64,7 +64,7 @@ export function Badge({
 
   const getTextStyle = (): TextStyle => {
     const baseTextStyle: TextStyle = {
-      ...typography.captionEmphasis,
+      ...(typography.captionEmphasis as TextStyle),
       textAlign: 'center',
     };
 

@@ -137,14 +137,14 @@ export const Button = forwardRef<View, ButtonProps>(
 
     const getButtonTextStyle = (): TextStyle => {
       const baseTextStyle: TextStyle = {
-        ...typography.bodyEmphasis,
+        ...(typography.bodyEmphasis as TextStyle),
       };
 
       switch (variant) {
         case 'destructive':
           return { ...baseTextStyle, color: destructiveForegroundColor };
         case 'success':
-          return { ...baseTextStyle, color: destructiveForegroundColor };
+          return { ...baseTextStyle, color: primaryForegroundColor };
         case 'outline':
           return { ...baseTextStyle, color: primaryColor };
         case 'secondary':
@@ -167,7 +167,7 @@ export const Button = forwardRef<View, ButtonProps>(
         case 'destructive':
           return destructiveForegroundColor;
         case 'success':
-          return destructiveForegroundColor;
+          return primaryForegroundColor;
         case 'outline':
           return primaryColor;
         case 'secondary':
