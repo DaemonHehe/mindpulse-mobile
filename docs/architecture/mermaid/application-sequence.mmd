@@ -1,0 +1,49 @@
+sequenceDiagram
+    actor User
+    participant App as React Native App
+    participant Auth as AuthContext
+    participant SA as Supabase Auth
+    participant DB as db service
+    participant PG as Supabase Postgres
+    participant Env as Environment Service
+    participant WX as Open-Meteo APIs
+    participant ORC as openrouter.js
+    participant Edge as openrouter-insight
+    participant OR as OpenRouter
+
+    User->>App: Open app
+    App->>Auth: hydrateSession()
+    Auth->>SA: getSession()
+    SA-->>Auth: session
+    Auth->>PG: read or create public.users
+    Auth->>PG: upsert public.user_settings
+
+    User->>App: Open Dashboard
+    App->>DB: getLatestDashboardSnapshot(userId)
+    DB->>PG: select latest biometric + prediction
+    PG-->>DB: snapshot
+    DB-->>App: snapshot
+
+    Note over App,PG: Dashboard currently generates and writes synthetic telemetry on an interval
+    App->>DB: createBiometricSnapshot()
+    DB->>PG: insert biometric_windows
+    DB->>PG: insert predictions_log
+
+    App->>Env: getEnvironmentalContext()
+    Env->>WX: weather + air quality requests
+    WX-->>Env: context
+    Env-->>App: location, weather, and air data
+
+    User->>App: Generate Insight
+    App->>ORC: askOpenRouter(prompt)
+    ORC->>SA: getSession()
+    ORC->>Edge: POST prompt + user token
+    Edge->>SA: getUser(accessToken)
+    Edge->>OR: chat completion
+    OR-->>Edge: completion
+    Edge-->>ORC: content
+    ORC-->>App: insight text
+
+    User->>App: Complete breathing session
+    App->>DB: insert or update intervention
+    DB->>PG: write interventions row

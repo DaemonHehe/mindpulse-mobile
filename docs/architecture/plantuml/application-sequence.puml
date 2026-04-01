@@ -1,0 +1,54 @@
+@startuml
+actor User
+participant "React Native App" as App
+participant "AuthContext" as Auth
+participant "Supabase Auth" as SA
+participant "db service" as DB
+participant "Supabase Postgres" as PG
+participant "Environment Service" as Env
+participant "Open-Meteo APIs" as WX
+participant "openrouter.js" as ORC
+participant "openrouter-insight" as Edge
+participant "OpenRouter" as OR
+
+User -> App : Open app
+App -> Auth : hydrateSession()
+Auth -> SA : getSession()
+SA --> Auth : session
+Auth -> PG : read or create public.users
+Auth -> PG : upsert public.user_settings
+
+User -> App : Open Dashboard
+App -> DB : getLatestDashboardSnapshot(userId)
+DB -> PG : select latest biometric + prediction
+PG --> DB : snapshot
+DB --> App : snapshot
+
+note over App,PG
+Dashboard currently generates and writes
+synthetic telemetry on an interval
+end note
+
+App -> DB : createBiometricSnapshot()
+DB -> PG : insert biometric_windows
+DB -> PG : insert predictions_log
+
+App -> Env : getEnvironmentalContext()
+Env -> WX : weather + air quality requests
+WX --> Env : context
+Env --> App : location, weather, and air data
+
+User -> App : Generate Insight
+App -> ORC : askOpenRouter(prompt)
+ORC -> SA : getSession()
+ORC -> Edge : POST prompt + user token
+Edge -> SA : getUser(accessToken)
+Edge -> OR : chat completion
+OR --> Edge : completion
+Edge --> ORC : content
+ORC --> App : insight text
+
+User -> App : Complete breathing session
+App -> DB : insert or update intervention
+DB -> PG : write interventions row
+@enduml

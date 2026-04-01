@@ -1,0 +1,76 @@
+@startuml
+hide methods
+hide stereotypes
+skinparam linetype ortho
+
+entity "auth.users" as auth_users {
+  *id : uuid <<PK>>
+  --
+  email : varchar
+}
+
+entity "public.users" as users {
+  *id : uuid <<PK, FK>>
+  --
+  email : varchar(255) <<UK>>
+  full_name : text
+  baseline_hr_bpm : integer
+  baseline_temp_c : decimal(4,2)
+  created_at : timestamptz
+  updated_at : timestamptz
+}
+
+entity "public.user_settings" as user_settings {
+  *user_id : uuid <<PK, FK>>
+  --
+  push_notifications : boolean
+  breathing_duration : integer
+  haptic_feedback : boolean
+  created_at : timestamptz
+  updated_at : timestamptz
+}
+
+entity "public.biometric_windows" as biometric_windows {
+  *id : bigint <<PK>>
+  --
+  user_id : uuid <<FK>>
+  timestamp : timestamptz
+  hr_mean : decimal(5,2)
+  hrv_sdnn : decimal(6,2)
+  temp_mean : decimal(4,2)
+  eda_peaks : integer
+  created_at : timestamptz
+}
+
+entity "public.predictions_log" as predictions_log {
+  *id : bigint <<PK>>
+  --
+  user_id : uuid <<FK>>
+  window_id : bigint <<FK>>
+  rf_confidence : decimal(3,2)
+  lstm_confidence : decimal(3,2)
+  fused_score : decimal(3,2)
+  final_state : varchar(20)
+  created_at : timestamptz
+}
+
+entity "public.interventions" as interventions {
+  *id : bigint <<PK>>
+  --
+  user_id : uuid <<FK>>
+  prediction_id : bigint <<FK, nullable>>
+  started_at : timestamptz
+  completed_secs : integer
+  trigger_type : varchar(20)
+  user_feedback : varchar(20)
+  created_at : timestamptz
+}
+
+auth_users ||--|| users : mirrors auth identity
+users ||--|| user_settings : has one
+users ||--o{ biometric_windows : records
+users ||--o{ predictions_log : owns
+users ||--o{ interventions : performs
+biometric_windows ||--o{ predictions_log : drives
+predictions_log ||--o{ interventions : optionally triggers
+@enduml

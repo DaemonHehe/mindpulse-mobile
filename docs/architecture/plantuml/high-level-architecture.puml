@@ -1,0 +1,66 @@
+@startuml
+left to right direction
+skinparam componentStyle rectangle
+
+actor User
+
+package "Expo React Native App" {
+  component App
+  component AuthContext
+  component DashboardScreen
+  component InsightsScreen
+  component InterventionScreen
+  component SettingsScreen
+  component "db service" as DbService
+  component "environment service" as EnvironmentService
+  component "openrouter client" as OpenRouterClient
+}
+
+database "public.users" as Users
+database "public.user_settings" as UserSettings
+database "public.biometric_windows" as BiometricWindows
+database "public.predictions_log" as PredictionsLog
+database "public.interventions" as Interventions
+
+cloud "Supabase Auth" as SupabaseAuth
+cloud "Supabase Edge Function" as EdgeFunction
+cloud "Open-Meteo Weather API" as WeatherApi
+cloud "Open-Meteo Air Quality API" as AirApi
+cloud "OpenRouter API" as OpenRouterApi
+component "expo-location" as ExpoLocation
+component "Supabase Realtime Channel" as Realtime
+
+User --> App
+App --> AuthContext
+App --> DashboardScreen
+App --> InsightsScreen
+App --> InterventionScreen
+App --> SettingsScreen
+
+AuthContext --> SupabaseAuth
+AuthContext --> Users
+AuthContext --> UserSettings
+
+DashboardScreen --> DbService
+InsightsScreen --> DbService
+InterventionScreen --> DbService
+SettingsScreen --> AuthContext
+
+DbService --> Users
+DbService --> UserSettings
+DbService --> BiometricWindows
+DbService --> PredictionsLog
+DbService --> Interventions
+
+DashboardScreen --> EnvironmentService
+EnvironmentService --> ExpoLocation
+EnvironmentService --> WeatherApi
+EnvironmentService --> AirApi
+
+DashboardScreen --> OpenRouterClient
+OpenRouterClient --> EdgeFunction
+EdgeFunction --> OpenRouterApi
+
+InsightsScreen --> Realtime
+Realtime --> PredictionsLog
+@enduml

@@ -1,0 +1,105 @@
+@startuml
+skinparam classAttributeIconSize 0
+
+class App {
+  +render()
+}
+
+class ThemeProvider {
+  +mode
+  +resolvedScheme
+  +setMode(mode)
+}
+
+class AuthProvider {
+  +session
+  +user
+  +profile
+  +signIn(credentials)
+  +signUp(payload)
+  +signOut()
+  +sendPasswordReset(email)
+  +updatePassword(password)
+  +updateProfile(updates)
+  +deleteProfile()
+  +refreshProfile()
+}
+
+class DashboardScreen {
+  +loadLatestSnapshot()
+  +persistSyntheticSnapshot()
+  +generateInsight()
+}
+
+class InsightsScreen {
+  +loadStressInsights()
+  +subscribeRealtime()
+}
+
+class InterventionScreen {
+  +startInterventionSession()
+  +handleComplete()
+}
+
+class SettingsScreen {
+  +handleSaveProfile()
+  +handleSignOut()
+  +handleDeleteProfile()
+}
+
+class useEnvironmentalContext {
+  +load()
+  +reload()
+}
+
+class useLlmInsight {
+  +generate(prompt)
+  +clear()
+}
+
+class db {
+  +ensureUserRecord(userId)
+  +getLatestDashboardSnapshot(userId)
+  +createBiometricSnapshot(window, prediction)
+  +getPredictionsInRange(userId, start, end)
+  +insertIntervention(data)
+  +updateIntervention(id, updates)
+}
+
+class supabase {
+  +auth.getSession()
+  +auth.signInWithPassword()
+  +from(table)
+  +channel(name)
+}
+
+class OpenRouterClient {
+  +askOpenRouter(payload)
+}
+
+class OpenRouterEdgeFunction {
+  +getAuthenticatedUser(req)
+  +fetchWithTimeout()
+  +extractAssistantContent()
+}
+
+App --> ThemeProvider
+App --> AuthProvider
+App --> DashboardScreen
+App --> InsightsScreen
+App --> SettingsScreen
+App --> InterventionScreen
+DashboardScreen --> useEnvironmentalContext
+DashboardScreen --> useLlmInsight
+DashboardScreen --> db
+InsightsScreen --> useEnvironmentalContext
+InsightsScreen --> db
+InsightsScreen --> supabase
+InterventionScreen --> db
+SettingsScreen --> AuthProvider
+AuthProvider --> supabase
+db --> supabase
+useLlmInsight --> OpenRouterClient
+OpenRouterClient --> supabase
+OpenRouterClient --> OpenRouterEdgeFunction
+@enduml

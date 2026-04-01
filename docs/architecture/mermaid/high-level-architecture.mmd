@@ -1,0 +1,34 @@
+flowchart TD
+    A[User] --> B[Expo React Native App]
+    B --> C[AuthContext]
+    B --> D[DashboardScreen]
+    B --> E[InsightsScreen]
+    B --> F[InterventionScreen]
+    B --> G[SettingsScreen]
+
+    C --> H[Supabase Auth]
+    C --> I[(public.users)]
+    C --> J[(public.user_settings)]
+
+    D --> K[db service]
+    E --> K
+    F --> K
+    G --> C
+
+    K --> I
+    K --> J
+    K --> L[(public.biometric_windows)]
+    K --> M[(public.predictions_log)]
+    K --> N[(public.interventions)]
+
+    D --> O[environment service]
+    O --> P[expo-location]
+    O --> Q[Open-Meteo Weather API]
+    O --> R[Open-Meteo Air Quality API]
+
+    D --> S[openrouter client]
+    S --> T[Supabase Edge Function]
+    T --> U[OpenRouter API]
+
+    E --> V[Supabase Realtime Channel]
+    V --> M
