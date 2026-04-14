@@ -36,6 +36,44 @@ const handleSupabaseError = (error: any, context: string) => {
   throw new Error(`Database error in ${context}: ${error?.message || 'Unknown error'}`);
 };
 
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+const roundTo = (value: number, digits: number) =>
+  Number(value.toFixed(digits));
+const toFiniteNumber = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const sanitizeBiometricWindowInsert = (
+  data: BiometricWindowInsert
+): BiometricWindowInsert => {
+  const hr = toFiniteNumber(data.hr_mean);
+  const hrv = toFiniteNumber(data.hrv_sdnn);
+  const temp = toFiniteNumber(data.temp_mean);
+  const eda = toFiniteNumber(data.eda_peaks);
+
+  if (hr === null || hr < 0 || hr > 240) {
+    throw new Error(`Invalid hr_mean: ${data.hr_mean}`);
+  }
+
+  if (temp === null || temp < 20 || temp > 45) {
+    throw new Error(`Invalid temp_mean: ${data.temp_mean}`);
+  }
+
+  if (eda === null || eda < 0 || eda > 8) {
+    throw new Error(`Invalid eda_peaks: ${data.eda_peaks}`);
+  }
+
+  return {
+    ...data,
+    hr_mean: roundTo(clamp(hr, 0, 240), 2),
+    hrv_sdnn: roundTo(clamp(hrv ?? 0, 0, 500), 2),
+    temp_mean: roundTo(clamp(temp, 20, 45), 2),
+    eda_peaks: Math.round(clamp(eda, 0, 8)),
+  };
+};
+
 // ============================================
 // USERS - User identity and baselines
 // ============================================
@@ -242,9 +280,10 @@ export const db = {
    */
   async insertBiometricWindow(data: BiometricWindowInsert): Promise<BiometricWindow> {
     try {
+      const sanitized = sanitizeBiometricWindowInsert(data);
       const { data: result, error } = await supabase
         .from('biometric_windows')
-        .insert([data])
+        .insert([sanitized])
         .select()
         .single();
 

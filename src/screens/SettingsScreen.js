@@ -9,15 +9,27 @@ import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { useThemeMode } from "../../theme/ThemeProvider";
 import { useAuth } from "../contexts/AuthContext";
+import { useBle } from "../contexts/BleContext";
 
 export default function SettingsScreen() {
   const colors = useThemeColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { mode, setMode, resolvedScheme } = useThemeMode();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [connected, setConnected] = useState(true);
   const { user, profile, profileLoading, updateProfile, signOut, deleteProfile } =
     useAuth();
+  const {
+    bluetoothState,
+    deviceName: bleDeviceName,
+    isScanning,
+    isConnecting,
+    isConnected,
+    error: bleError,
+    configError,
+    connect,
+    disconnect,
+    clearError: clearBleError,
+  } = useBle();
   const [fullName, setFullName] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileError, setProfileError] = useState("");
@@ -25,10 +37,14 @@ export default function SettingsScreen() {
   useEffect(() => {
     setFullName(profile?.full_name ?? "");
   }, [profile?.full_name]);
-
-  const handleDisconnect = () => {
-    setConnected(false);
-  };
+  const wearableBusy = isScanning || isConnecting;
+  const wearableStatus = isConnecting
+    ? "Connecting"
+    : isScanning
+    ? "Scanning"
+    : isConnected
+    ? "Connected"
+    : "Disconnected";
 
   const handleSaveProfile = async () => {
     if (!user) return;
@@ -75,6 +91,24 @@ export default function SettingsScreen() {
     );
   };
 
+  const handleConnectWearable = async () => {
+    clearBleError();
+    try {
+      await connect();
+    } catch (err) {
+      // BLE errors are surfaced by the provider.
+    }
+  };
+
+  const handleDisconnectWearable = async () => {
+    clearBleError();
+    try {
+      await disconnect();
+    } catch (err) {
+      // BLE errors are surfaced by the provider.
+    }
+  };
+
   return (
     <Screen scroll={true}>
       <Text style={styles.title}>Profile</Text>
@@ -95,15 +129,22 @@ export default function SettingsScreen() {
           <Text style={styles.readonlyText}>{user?.email ?? "Not signed in"}</Text>
         </View>
 
-        <Text style={styles.meta}>Device: MindPulse Watch</Text>
+        <Text style={styles.meta}>Device: {bleDeviceName}</Text>
         <View style={styles.statusRow}>
           <Text style={styles.meta}>Status</Text>
-          <Badge variant={connected ? "success" : "destructive"}>
-            {connected ? "Connected" : "Disconnected"}
+          <Badge
+            variant={
+              isConnected ? "success" : wearableBusy ? "secondary" : "destructive"
+            }
+          >
+            {wearableStatus}
           </Badge>
         </View>
+        <Text style={styles.meta}>Bluetooth adapter: {bluetoothState}</Text>
 
         {profileError ? <Text style={styles.error}>{profileError}</Text> : null}
+        {configError ? <Text style={styles.error}>{configError}</Text> : null}
+        {bleError ? <Text style={styles.error}>{bleError}</Text> : null}
 
         <Button
           onPress={handleSaveProfile}
@@ -165,12 +206,13 @@ export default function SettingsScreen() {
       </Card>
 
       <Button
-        variant="destructive"
-        onPress={handleDisconnect}
-        disabled={!connected}
+        variant={isConnected ? "destructive" : "default"}
+        onPress={isConnected ? handleDisconnectWearable : handleConnectWearable}
+        disabled={wearableBusy || (!isConnected && Boolean(configError))}
+        loading={wearableBusy}
         style={styles.disconnectButton}
       >
-        {connected ? "Disconnect Wearable" : "Wearable Disconnected"}
+        {isConnected ? "Disconnect Wearable" : "Connect Wearable"}
       </Button>
 
       <Button

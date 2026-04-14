@@ -6,16 +6,21 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const normalizeEnv = (value) => (typeof value === 'string' ? value.trim() : '');
 
-if (!supabaseUrl || !supabaseAnonKey) {
+const supabaseUrl = normalizeEnv(process.env.EXPO_PUBLIC_SUPABASE_URL);
+const supabaseAnonKey = normalizeEnv(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+const FALLBACK_SUPABASE_URL = 'https://placeholder.supabase.co';
+const FALLBACK_SUPABASE_ANON_KEY = 'placeholder-anon-key';
+
+if (!isSupabaseConfigured) {
   console.warn(
-    '[Supabase] Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY'
+    '[SupabaseInit:v2] Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY'
   );
 }
 
-export const supabase = createClient(supabaseUrl ?? '', supabaseAnonKey ?? '', {
+const buildClientOptions = () => ({
   auth: {
     storage: AsyncStorage,
     autoRefreshToken: true,
@@ -23,6 +28,31 @@ export const supabase = createClient(supabaseUrl ?? '', supabaseAnonKey ?? '', {
     detectSessionInUrl: false,
   },
 });
+
+const createSupabaseClientSafely = () => {
+  const resolvedSupabaseUrl = supabaseUrl || FALLBACK_SUPABASE_URL;
+  const resolvedSupabaseAnonKey = supabaseAnonKey || FALLBACK_SUPABASE_ANON_KEY;
+
+  try {
+    return createClient(
+      resolvedSupabaseUrl,
+      resolvedSupabaseAnonKey,
+      buildClientOptions()
+    );
+  } catch (error) {
+    console.error(
+      '[SupabaseInit:v2] Primary client init failed, retrying with fallback config',
+      error
+    );
+    return createClient(
+      FALLBACK_SUPABASE_URL,
+      FALLBACK_SUPABASE_ANON_KEY,
+      buildClientOptions()
+    );
+  }
+};
+
+export const supabase = createSupabaseClientSafely();
 
 const authRedirectUrl = process.env.EXPO_PUBLIC_SUPABASE_REDIRECT_URL;
 export const USER_PROFILE_FIELDS =

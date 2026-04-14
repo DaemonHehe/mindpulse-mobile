@@ -1,0 +1,7 @@
+gradio
+joblib
+pandas
+numpy
+scipy
+biosppy
+huggingface_hub

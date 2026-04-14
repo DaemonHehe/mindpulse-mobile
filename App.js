@@ -1,6 +1,7 @@
 import "react-native-gesture-handler";
 import React, { useMemo } from "react";
 import { ActivityIndicator, View } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -9,6 +10,7 @@ import { Feather } from "@expo/vector-icons";
 import { ThemeProvider, useThemeMode } from "./theme/ThemeProvider";
 import { useThemeColors } from "./src/hooks/useThemeColors";
 import { AuthProvider, useAuth } from "./src/contexts/AuthContext";
+import { BleProvider } from "./src/contexts/BleContext";
 
 import DashboardScreen from "./src/screens/DashboardScreen";
 import InsightsScreen from "./src/screens/InsightsScreen";
@@ -134,10 +136,14 @@ function AppContent() {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <AuthProvider>
+          <BleProvider>
+            <AppContent />
+          </BleProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }

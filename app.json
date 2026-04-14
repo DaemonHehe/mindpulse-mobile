@@ -30,7 +30,13 @@
       }
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      [
+        "react-native-ble-plx",
+        {
+          "bluetoothAlwaysPermission": "MindPulse uses Bluetooth to connect to your ESP32 prototype."
+        }
+      ]
     ]
   }
 }
