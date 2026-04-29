@@ -90,7 +90,11 @@ EXPO_PUBLIC_BLE_CHARACTERISTIC_UUID=beb5483e-36e1-4688-b7f5-ea07361b26a8
 EXPO_PUBLIC_BLE_PPG_CHARACTERISTIC_UUID=d4f9b2d0-7d4a-4f8f-9c79-8b3e25f7c801
 
 # Optional app-side prediction timeout (ms)
-EXPO_PUBLIC_STRESS_REQUEST_TIMEOUT_MS=120000
+EXPO_PUBLIC_STRESS_REQUEST_TIMEOUT_MS=15000
+EXPO_PUBLIC_STRESS_EDGE_TIMEOUT_MS=15000
+EXPO_PUBLIC_HF_DIRECT_TIMEOUT_MS=12000
+EXPO_PUBLIC_ALLOW_HF_QUEUE_FALLBACK=false
+EXPO_PUBLIC_DETECT_WINDOW_MS=30000
 ```
 
 ### 3. Start app
@@ -132,20 +136,21 @@ supabase functions deploy openrouter-insight
 
 ```bash
 supabase secrets set HF_RF_SPACE_URL=https://YOUR_SPACE.hf.space
-supabase secrets set HF_REQUEST_TIMEOUT_MS=120000
+supabase secrets set HF_REQUEST_TIMEOUT_MS=15000
+supabase secrets set ALLOW_HF_QUEUE_FALLBACK=false
 ```
 
 #### `openrouter-insight`
 
 ```bash
 supabase secrets set OPENROUTER_API_KEY=YOUR_KEY
-supabase secrets set OPENROUTER_MODEL=stepfun/step-3.5-flash:free
-supabase secrets set OPENROUTER_FALLBACK_MODEL=openrouter/free
+supabase secrets set OPENROUTER_MODEL=minimax/minimax-01
+supabase secrets set OPENROUTER_FALLBACK_MODEL=openrouter/auto
 supabase secrets set OPENROUTER_REFERER=https://mindpulse.app/
 supabase secrets set OPENROUTER_TITLE=MindPulse
-supabase secrets set OPENROUTER_TIMEOUT_MS=30000
+supabase secrets set OPENROUTER_TIMEOUT_MS=12000
 supabase secrets set OPENROUTER_RETRY_BASE_MS=800
-supabase secrets set OPENROUTER_RETRY_COUNT=1
+supabase secrets set OPENROUTER_RETRY_COUNT=0
 ```
 
 ## ESP32 Firmware
@@ -187,9 +192,9 @@ The app enforces a strict RF feature contract (`mindpulse-rf-17f-v1`) so deploym
 - Restart Metro cache: `npx expo start -c`.
 - Ensure ESP32 is sending full 7-field payload and app UUIDs match firmware.
 
-### `Need at least 60s of BLE data before detection`
+### `Need a stable BLE window before detection`
 
-- Keep watch connected continuously for at least 60 seconds.
+- Keep watch connected continuously through the detection countdown.
 - Confirm live metrics update first (not `-`).
 
 ### Skin temperature shows `-` or `0`
@@ -199,11 +204,14 @@ The app enforces a strict RF feature contract (`mindpulse-rf-17f-v1`) so deploym
 
 ### Stress prediction timeout
 
-- Increase `EXPO_PUBLIC_STRESS_REQUEST_TIMEOUT_MS` and `HF_REQUEST_TIMEOUT_MS`.
+- Deploy the updated Hugging Face Space so `/gradio_api/run/predict` can skip the queue.
+- Keep `EXPO_PUBLIC_ALLOW_HF_QUEUE_FALLBACK=false` unless you are okay with long queued Gradio waits.
+- Increase `EXPO_PUBLIC_STRESS_REQUEST_TIMEOUT_MS` and `HF_REQUEST_TIMEOUT_MS` only after confirming the direct endpoint works.
 - Check Hugging Face Space health and latency.
 
 ## Documentation
 
+- [docs/figures/README.md](docs/figures/README.md)
 - [ARCHITECTURE_DIAGRAMS.md](ARCHITECTURE_DIAGRAMS.md)
 - [DATABASE_README.md](DATABASE_README.md)
 - [SCHEMA_GUIDE.md](SCHEMA_GUIDE.md)

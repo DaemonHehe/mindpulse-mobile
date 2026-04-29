@@ -2,6 +2,7 @@ import { PermissionsAndroid, Platform } from "react-native";
 import { decode as decodeBase64 } from "base-64";
 import {
   clamp,
+  DEFAULT_SKIN_TEMP_C,
   isFiniteWithin,
   normalizeEdaPeaks,
   normalizeTemperatureCelsius,
@@ -242,6 +243,25 @@ export const decodeBlePayload = (encodedValue) => {
     (normalizedBase64 !== encodedValue ? tryDecode(normalizedBase64) : null) ??
     String(encodedValue);
 
+  const byteValues = Array.from(decoded, (char) => char.charCodeAt(0));
+  if (byteValues.length === 14) {
+    const int16 = (offset) => {
+      const value = byteValues[offset] | (byteValues[offset + 1] << 8);
+      return value & 0x8000 ? value - 0x10000 : value;
+    };
+
+    return {
+      acc_x: int16(0) / 100,
+      acc_y: int16(2) / 100,
+      acc_z: int16(4) / 100,
+      temp_mean: int16(6) / 100,
+      hr_mean: int16(8),
+      ir_value: int16(10) * 100,
+      eda_raw: int16(12),
+      eda_peaks: normalizeEdaPeaks(int16(12)),
+    };
+  }
+
   const trimmed = decoded?.trim();
 
   if (!trimmed) return null;
@@ -286,6 +306,16 @@ const normalizeEdaSignal = (value) => {
   return normalizeEdaPeaks(value);
 };
 
+const normalizeLiveTemperature = (value) => {
+  const normalized = normalizeTemperatureCelsius(value);
+  if (Number.isFinite(normalized)) {
+    return normalized;
+  }
+
+  // The firmware emits 0 while the MAX30205 has not produced a usable reading.
+  return toNumber(value) === 0 ? DEFAULT_SKIN_TEMP_C : null;
+};
+
 const parseCsvPayload = (raw) => {
   if (typeof raw !== "string") {
     return null;
@@ -308,8 +338,26 @@ const parseCsvPayload = (raw) => {
     return null;
   }
 
-  const [accX, accY, accZ, tempC, beatAvg, irValue, edaValue] = selected;
-  const nextTemp = normalizeTemperatureCelsius(tempC);
+  let [accX, accY, accZ, tempC, beatAvg, irValue, edaValue] = selected;
+
+  const likelyCompactPayload =
+    hasValidCommaNumbers &&
+    raw.length <= 24 &&
+    Math.abs(accX) <= 200 &&
+    Math.abs(accY) <= 200 &&
+    Math.abs(accZ) <= 200 &&
+    tempC > 100;
+
+  if (likelyCompactPayload) {
+    accX /= 10;
+    accY /= 10;
+    accZ /= 10;
+    tempC /= 10;
+    irValue *= 1000;
+    edaValue *= 10;
+  }
+
+  const nextTemp = normalizeLiveTemperature(tempC);
   const nextHr = toNumber(beatAvg);
   const nextIr = toNumber(irValue);
   const nextEdaRaw = toNumber(edaValue);
@@ -359,13 +407,20 @@ export const normalizeBleReading = (payload) => {
     source.hr_mean ?? source.hr ?? source.heartRate ?? source.heart_rate
   );
   const nextHrv = toNumber(source.hrv_sdnn ?? source.hrv ?? source.sdnn);
-  const nextTemp = normalizeTemperatureCelsius(
+  const tempSource =
     source.temp_mean ??
-      source.temp_c ??
-      source.temperature ??
-      source.temperature_c
+    source.temp_c ??
+    source.temp ??
+    source.skin_temp ??
+    source.skinTemp ??
+    source.temperature ??
+    source.temperature_c ??
+    source.body_temperature ??
+    source.object_temp;
+  const nextTemp = normalizeLiveTemperature(tempSource);
+  const nextEda = toNumber(
+    source.eda_peaks ?? source.eda ?? source.gsr_peaks ?? source.eda_raw
   );
-  const nextEda = toNumber(source.eda_peaks ?? source.eda ?? source.gsr_peaks);
 
   const metrics = {
     hr_mean: isFiniteWithin(nextHr, SENSOR_RANGES.hrBpm.min, SENSOR_RANGES.hrBpm.max)

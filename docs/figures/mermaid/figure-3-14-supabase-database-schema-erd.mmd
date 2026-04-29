@@ -1,0 +1,65 @@
+erDiagram
+    AUTH_USERS ||--|| USERS : "mirrors auth identity"
+    USERS ||--|| USER_SETTINGS : "has one"
+    USERS ||--o{ BIOMETRIC_WINDOWS : "records"
+    USERS ||--o{ PREDICTIONS_LOG : "owns"
+    USERS ||--o{ INTERVENTIONS : "performs"
+    BIOMETRIC_WINDOWS ||--o{ PREDICTIONS_LOG : "drives"
+    PREDICTIONS_LOG ||--o{ INTERVENTIONS : "optionally triggers"
+
+    AUTH_USERS {
+        uuid id PK
+        string email
+    }
+
+    USERS {
+        uuid id PK
+        string email UK
+        text full_name
+        int baseline_hr_bpm
+        decimal baseline_temp_c
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    USER_SETTINGS {
+        uuid user_id PK, FK
+        boolean push_notifications
+        int breathing_duration
+        boolean haptic_feedback
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    BIOMETRIC_WINDOWS {
+        bigint id PK
+        uuid user_id FK
+        timestamptz timestamp
+        decimal hr_mean
+        decimal hrv_sdnn
+        decimal temp_mean
+        int eda_peaks
+        timestamptz created_at
+    }
+
+    PREDICTIONS_LOG {
+        bigint id PK
+        uuid user_id FK
+        bigint window_id FK
+        decimal rf_confidence
+        decimal lstm_confidence
+        decimal fused_score
+        string final_state
+        timestamptz created_at
+    }
+
+    INTERVENTIONS {
+        bigint id PK
+        uuid user_id FK
+        bigint prediction_id FK
+        timestamptz started_at
+        int completed_secs
+        string trigger_type
+        string user_feedback
+        timestamptz created_at
+    }

@@ -224,13 +224,26 @@ String buildPayload() {
          String(edaValue);
 }
 
+void writeInt16LE(byte* payload, byte offset, int16_t value) {
+  payload[offset] = value & 0xFF;
+  payload[offset + 1] = (value >> 8) & 0xFF;
+}
+
 void notifyBle() {
   if (!deviceConnected || pCharacteristic == NULL) return;
 
-  String payload = buildPayload();
-  pCharacteristic->setValue(payload.c_str());
+  byte payload[14];
+  writeInt16LE(payload, 0, (int16_t)round(accX * 100.0));
+  writeInt16LE(payload, 2, (int16_t)round(accY * 100.0));
+  writeInt16LE(payload, 4, (int16_t)round(accZ * 100.0));
+  writeInt16LE(payload, 6, (int16_t)round(tempC * 100.0));
+  writeInt16LE(payload, 8, (int16_t)beatAvg);
+  writeInt16LE(payload, 10, (int16_t)min(irValue / 100, 32767L));
+  writeInt16LE(payload, 12, (int16_t)edaValue);
+
+  pCharacteristic->setValue(payload, sizeof(payload));
   pCharacteristic->notify();
-  Serial.println(payload);
+  Serial.println(buildPayload());
 }
 
 void notifyPpgBle() {

@@ -1,0 +1,104 @@
+flowchart TB
+    User[User]
+
+    subgraph Wearable["Wearable Layer"]
+        ESP32[ESP32 Prototype]
+        Sensors[PPG + Temp + EDA + Accelerometer]
+        BLE[BLE GATT Service]
+        Sensors --> ESP32 --> BLE
+    end
+
+    subgraph Mobile["Mobile Application"]
+        subgraph UI["Presentation"]
+            App[App.js]
+            Dash[DashboardScreen]
+            Insights[InsightsScreen]
+            Intervention[InterventionScreen]
+            Settings[SettingsScreen]
+        end
+
+        subgraph State["State / Hooks"]
+            Auth[AuthContext]
+            Ble[BleContext]
+            Theme[ThemeProvider]
+            EnvHook[useEnvironmentalContext]
+            LlmHook[useLlmInsight]
+        end
+
+        subgraph Services["Application Services"]
+            BleSvc[ble.js]
+            EnvSvc[environment.js]
+            PredictSvc[stressPrediction.js]
+            OrSvc[openrouter.js]
+            DbSvc[db.ts]
+            FnClient[functionClient.js]
+            Prompt[buildInsightPrompt]
+        end
+
+        subgraph Local["Local Storage"]
+            Async[AsyncStorage]
+        end
+    end
+
+    subgraph Supabase["Supabase Platform"]
+        SAuth[Supabase Auth]
+        SDb[(Postgres)]
+        HFEdge[hf-stress-predict]
+        OREdge[openrouter-insight]
+        Realtime[Realtime Channels]
+    end
+
+    subgraph External["External Services"]
+        Meteo[Open-Meteo Weather + Air APIs]
+        Router[OpenRouter API]
+        HF[Hugging Face Space]
+        Location[expo-location]
+    end
+
+    User --> App
+    BLE --> BleSvc
+    BleSvc --> Ble
+    BleSvc --> Dash
+    Dash --> EnvHook
+    Dash --> LlmHook
+    Dash --> PredictSvc
+    Dash --> DbSvc
+    Dash --> Prompt
+    Insights --> DbSvc
+    Insights --> Realtime
+    Intervention --> DbSvc
+    Settings --> Auth
+    App --> Auth
+    App --> Theme
+    App --> Dash
+    App --> Insights
+    App --> Intervention
+    App --> Settings
+
+    BleSvc --> Ble
+    BleSvc --> Async
+    Auth --> SAuth
+    Auth --> SDb
+    DbSvc --> SDb
+    PredictSvc --> FnClient
+    OrSvc --> FnClient
+    LlmHook --> OrSvc
+    Prompt --> OrSvc
+    EnvHook --> EnvSvc
+    EnvSvc --> Location
+    EnvSvc --> Meteo
+    FnClient --> SAuth
+    FnClient --> HFEdge
+    FnClient --> OREdge
+    HFEdge --> HF
+    OREdge --> Router
+
+    classDef hardware fill:#f4efe3,stroke:#8a6f3b,color:#2c2414
+    classDef mobile fill:#edf2f5,stroke:#577182,color:#10212b
+    classDef backend fill:#eef1ea,stroke:#627a46,color:#1f2a16
+    classDef external fill:#f3ecec,stroke:#8f5a5a,color:#2d1717
+
+    class ESP32,Sensors,BLE hardware
+    class App,Dash,Insights,Intervention,Settings,Auth,Ble,Theme,EnvHook,LlmHook,BleSvc,EnvSvc,PredictSvc,OrSvc,DbSvc,FnClient,Prompt,Async mobile
+    class SAuth,SDb,HFEdge,OREdge,Realtime backend
+    class Meteo,Router,HF,Location external

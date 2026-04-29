@@ -332,6 +332,7 @@ demo = gr.Interface(
     ],
     outputs=gr.JSON(label="MindPulse Prediction"),
     title="MindPulse Stress Detection API",
+    api_name="predict",
     description=(
         "Send raw wearable sensor arrays. Uses hr_raw for HR when BVP is too sparse "
         "for reliable HRV."
@@ -339,4 +340,4 @@ demo = gr.Interface(
 )
 
 
-demo.launch()
+demo.queue(api_open=True, default_concurrency_limit=4).launch()

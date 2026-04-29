@@ -1,7 +1,8 @@
 import { invokeSupabaseFunction } from "./functionClient";
 
 const FUNCTION_NAME = "openrouter-insight";
-const REQUEST_TIMEOUT_MS = 30000;
+const REQUEST_TIMEOUT_MS =
+  Number(process.env.EXPO_PUBLIC_OPENROUTER_TIMEOUT_MS) || 12000;
 
 export async function askOpenRouter({
   system,

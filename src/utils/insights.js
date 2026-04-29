@@ -1,6 +1,11 @@
 export const buildInsightPrompt = (envContext, events) => {
   if (!envContext) return "";
 
+  const airQuality =
+    Number.isFinite(envContext.air?.usAqi) && envContext.air?.available !== false
+      ? envContext.air.usAqi
+      : "unavailable";
+
   const eventLines = events
     .map((event) => `- ${event.title} (${event.duration})`)
     .join("\n");
@@ -13,7 +18,7 @@ export const buildInsightPrompt = (envContext, events) => {
     `Weather: ${envContext.weather.weatherLabel}, ${envContext.weather.temperatureC}C (feels like ${envContext.weather.feelsLikeC}C)`,
     `Humidity: ${envContext.weather.humidityPercent}%`,
     `Wind: ${envContext.weather.windSpeed} m/s`,
-    `Air quality (US AQI): ${envContext.air.usAqi}`,
+    `Air quality (US AQI): ${airQuality}`,
     "",
     "Recent stress events:",
     eventLines,

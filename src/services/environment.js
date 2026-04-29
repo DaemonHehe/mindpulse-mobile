@@ -3,6 +3,9 @@ import * as Location from "expo-location";
 const WEATHER_ENDPOINT = "https://api.open-meteo.com/v1/forecast";
 const AIR_QUALITY_ENDPOINT = "https://air-quality-api.open-meteo.com/v1/air-quality";
 const REQUEST_TIMEOUT_MS = 10000;
+const AIR_QUALITY_TIMEOUT_MS = 5000;
+const LAST_KNOWN_MAX_AGE_MS = 30 * 60 * 1000;
+const LAST_KNOWN_REQUIRED_ACCURACY_M = 5000;
 
 const WEATHER_CODE_LABELS = {
   0: "Clear sky",
@@ -62,25 +65,86 @@ const fetchWithTimeout = async (url, options = {}, timeoutMs = REQUEST_TIMEOUT_M
   }
 };
 
+const createLocationError = (message, code, cause) => {
+  const error = new Error(message);
+  error.code = code;
+  if (cause) {
+    error.cause = cause;
+  }
+  return error;
+};
+
+const ensureForegroundLocationPermission = async () => {
+  let permission = await Location.getForegroundPermissionsAsync();
+  if (permission.granted) {
+    return permission;
+  }
+
+  if (permission.canAskAgain === false) {
+    throw createLocationError(
+      "Location permission is blocked. Enable location access in system settings to load environmental context.",
+      "LOCATION_DENIED"
+    );
+  }
+
+  try {
+    permission = await Location.requestForegroundPermissionsAsync();
+  } catch (error) {
+    throw createLocationError(
+      "Unable to request location permission right now. Retry after the screen finishes loading.",
+      "LOCATION_PERMISSION_REQUEST_FAILED",
+      error
+    );
+  }
+
+  if (!permission.granted) {
+    throw createLocationError(
+      permission.canAskAgain === false
+        ? "Location permission is blocked. Enable location access in system settings to load environmental context."
+        : "Location permission is required to load environmental context.",
+      "LOCATION_DENIED"
+    );
+  }
+
+  return permission;
+};
+
+const getBestAvailablePosition = async () => {
+  try {
+    return await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+      mayShowUserSettingsDialog: true,
+    });
+  } catch (error) {
+    const lastKnown = await Location.getLastKnownPositionAsync({
+      maxAge: LAST_KNOWN_MAX_AGE_MS,
+      requiredAccuracy: LAST_KNOWN_REQUIRED_ACCURACY_M,
+    });
+
+    if (lastKnown) {
+      return lastKnown;
+    }
+
+    throw createLocationError(
+      "Current location is unavailable. Enable device location and retry environmental context.",
+      "LOCATION_UNAVAILABLE",
+      error
+    );
+  }
+};
+
 export async function getEnvironmentalContext() {
+  await ensureForegroundLocationPermission();
+
   const servicesEnabled = await Location.hasServicesEnabledAsync();
   if (!servicesEnabled) {
-    const error = new Error("Location services are disabled.");
-    error.code = "LOCATION_DISABLED";
-    throw error;
+    throw createLocationError(
+      "Location services are disabled. Turn on device location to load environmental context.",
+      "LOCATION_DISABLED"
+    );
   }
 
-  const permission = await Location.requestForegroundPermissionsAsync();
-  if (permission.status !== "granted") {
-    const error = new Error("Location permission not granted.");
-    error.code = "LOCATION_DENIED";
-    throw error;
-  }
-
-  const position = await Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.Balanced,
-  });
-
+  const position = await getBestAvailablePosition();
   const { latitude, longitude } = position.coords;
   let place = null;
   try {
@@ -103,30 +167,37 @@ export async function getEnvironmentalContext() {
     "&timezone=auto";
 
   let weatherRes;
-  let airRes;
+  let airRes = null;
+  let airQualityError = "";
 
   try {
-    [weatherRes, airRes] = await Promise.all([
-      fetchWithTimeout(weatherUrl),
-      fetchWithTimeout(airUrl),
-    ]);
+    weatherRes = await fetchWithTimeout(weatherUrl);
   } catch (error) {
     const message =
       error?.name === "AbortError"
         ? "Environment request timed out."
-        : "Failed to reach environment data provider.";
+        : "Failed to reach weather data provider.";
     throw new Error(message);
   }
 
   if (!weatherRes.ok) {
     throw new Error(`Weather request failed (${weatherRes.status}).`);
   }
-  if (!airRes.ok) {
-    throw new Error(`Air quality request failed (${airRes.status}).`);
+
+  try {
+    airRes = await fetchWithTimeout(airUrl, {}, AIR_QUALITY_TIMEOUT_MS);
+    if (!airRes.ok) {
+      throw new Error(`Air quality request failed (${airRes.status}).`);
+    }
+  } catch (error) {
+    airQualityError =
+      error?.name === "AbortError"
+        ? "Air quality request timed out."
+        : error?.message || "Failed to reach air quality data provider.";
   }
 
   const weatherJson = await weatherRes.json();
-  const airJson = await airRes.json();
+  const airJson = airRes?.ok ? await airRes.json() : {};
 
   const current = weatherJson.current || weatherJson.current_weather || {};
   const airCurrent = airJson.current || {};
@@ -158,10 +229,12 @@ export async function getEnvironmentalContext() {
       pm2_5: toNumber(airCurrent.pm2_5),
       pm10: toNumber(airCurrent.pm10),
       usAqi: toNumber(airCurrent.us_aqi),
+      available: !airQualityError,
     },
     meta: {
       timezone: weatherJson.timezone || airJson.timezone || null,
       fetchedAt: new Date().toISOString(),
+      airQualityError,
     },
   };
 }

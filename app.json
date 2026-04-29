@@ -18,10 +18,6 @@
       "bundleIdentifier": "com.daemonberg.mindpulse"
     },
     "android": {
-      "permissions": [
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
-      ],
       "package": "com.daemonberg.mindpulse"
     },
     "extra": {
@@ -31,6 +27,12 @@
     },
     "plugins": [
       "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "MindPulse uses your location to show local weather and air quality."
+        }
+      ],
       [
         "react-native-ble-plx",
         {

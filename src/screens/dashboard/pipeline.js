@@ -1,5 +1,6 @@
 import {
   SENSOR_RANGES,
+  DEFAULT_SKIN_TEMP_C,
   clamp,
   isFiniteWithin,
   normalizeTemperatureCelsius,
@@ -10,7 +11,9 @@ import {
 export const STRESS_THRESHOLD_HR = 95;
 export const REMOTE_PREDICTION_WINDOW_MS = 60 * 1000;
 export const REMOTE_PREDICTION_STRIDE_MS = 30 * 1000;
-export const DETECT_WINDOW_SEC = REMOTE_PREDICTION_WINDOW_MS / 1000;
+export const MANUAL_DETECTION_WINDOW_MS =
+  Number(process.env.EXPO_PUBLIC_DETECT_WINDOW_MS) || 30 * 1000;
+export const DETECT_WINDOW_SEC = Math.round(MANUAL_DETECTION_WINDOW_MS / 1000);
 
 const average = (values) =>
   values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
@@ -132,25 +135,23 @@ const toWindowTimestampMs = (reading) => {
   return Number.isFinite(parsed) ? parsed : Date.now();
 };
 
-export const appendBleWindowSample = (
-  samples,
-  reading,
-  windowMs = REMOTE_PREDICTION_WINDOW_MS
-) => {
+const buildBleSample = (reading) => {
   const raw = reading?.raw;
   const metrics = reading?.metrics;
 
   if (!raw || !metrics) {
-    return samples;
+    return null;
   }
 
-  const timestampMs = toWindowTimestampMs(reading);
-  const sample = {
-    timestampMs,
+  const normalizedTemp = normalizeTemperatureCelsius(metrics.temp_mean);
+
+  return {
+    timestampMs: toWindowTimestampMs(reading),
     acc_x: Number(raw.acc_x),
     acc_y: Number(raw.acc_y),
     acc_z: Number(raw.acc_z),
-    temp: Number(normalizeTemperatureCelsius(metrics.temp_mean)),
+    temp: Number.isFinite(normalizedTemp) ? normalizedTemp : DEFAULT_SKIN_TEMP_C,
+    tempFallbackUsed: !Number.isFinite(normalizedTemp),
     hr: Number(metrics.hr_mean),
     bvp: Number(raw.ir_value),
     ppg_samples: Array.isArray(raw.ppg_samples)
@@ -159,6 +160,17 @@ export const appendBleWindowSample = (
     eda: Number(raw.eda_raw ?? metrics.eda_peaks),
     eda_display: Number(metrics.eda_peaks ?? raw.eda_raw),
   };
+};
+
+export const appendBleWindowSample = (
+  samples,
+  reading,
+  windowMs = REMOTE_PREDICTION_WINDOW_MS
+) => {
+  const sample = buildBleSample(reading);
+  if (!sample) {
+    return samples;
+  }
 
   if (
     ![
@@ -189,15 +201,96 @@ export const appendBleWindowSample = (
   }
 
   const nextSamples = [...samples, sample];
-  const cutoffMs = timestampMs - windowMs;
+  const cutoffMs = sample.timestampMs - windowMs;
   return nextSamples.filter((entry) => entry.timestampMs >= cutoffMs);
+};
+
+const getInvalidBleSampleReason = (reading) => {
+  const sample = buildBleSample(reading);
+  if (!sample) {
+    if (typeof reading?.raw?.raw === "string") {
+      const preview = reading.raw.raw.replace(/\s+/g, " ").slice(0, 80);
+      return `CSV is incomplete or truncated: ${preview}`;
+    }
+    return "No parsed BLE metrics yet.";
+  }
+
+  const missingKey = Object.entries(sample).find(
+    ([key, value]) => key !== "tempFallbackUsed" && !Number.isFinite(value)
+  )?.[0];
+  if (missingKey) {
+    return `BLE ${missingKey} is missing or invalid.`;
+  }
+
+  if (!isFiniteWithin(sample.temp, SENSOR_RANGES.tempC.min, SENSOR_RANGES.tempC.max)) {
+    return `Skin temperature ${sample.temp}C is outside ${SENSOR_RANGES.tempC.min}-${SENSOR_RANGES.tempC.max}C.`;
+  }
+
+  if (!isFiniteWithin(sample.hr, SENSOR_RANGES.hrBpm.min, SENSOR_RANGES.hrBpm.max)) {
+    return `Heart rate ${sample.hr} is outside ${SENSOR_RANGES.hrBpm.min}-${SENSOR_RANGES.hrBpm.max} BPM.`;
+  }
+
+  if (!isFiniteWithin(sample.eda, SENSOR_RANGES.edaRaw.min, SENSOR_RANGES.edaRaw.max)) {
+    return `Raw EDA ${sample.eda} is outside ${SENSOR_RANGES.edaRaw.min}-${SENSOR_RANGES.edaRaw.max}.`;
+  }
+
+  if (
+    !isFiniteWithin(
+      sample.eda_display,
+      SENSOR_RANGES.edaPeaks.min,
+      SENSOR_RANGES.edaPeaks.max
+    )
+  ) {
+    return `Normalized EDA ${sample.eda_display} is outside ${SENSOR_RANGES.edaPeaks.min}-${SENSOR_RANGES.edaPeaks.max}.`;
+  }
+
+  return "";
+};
+
+export const getBleWindowStatus = (
+  samples,
+  latestReading,
+  windowMs = REMOTE_PREDICTION_WINDOW_MS
+) => {
+  const nowMs = Date.now();
+  const windowStartedAtCutoff = nowMs - windowMs;
+  const windowSamples = Array.isArray(samples)
+    ? samples.filter((sample) => sample.timestampMs >= windowStartedAtCutoff)
+    : [];
+  const firstSampleAt = windowSamples[0]?.timestampMs ?? null;
+  const lastSampleAt = windowSamples[windowSamples.length - 1]?.timestampMs ?? null;
+  const spanMs =
+    firstSampleAt !== null && lastSampleAt !== null ? lastSampleAt - firstSampleAt : 0;
+  const requiredCoverageMs = windowMs * 0.85;
+  const invalidReason = getInvalidBleSampleReason(latestReading);
+  const rawPreview =
+    typeof latestReading?.raw?.raw === "string"
+      ? latestReading.raw.raw.replace(/\s+/g, " ").slice(0, 80)
+      : "";
+
+  return {
+    acceptedSamples: windowSamples.length,
+    spanMs,
+    spanSeconds: Math.max(0, Math.floor(spanMs / 1000)),
+    requiredSeconds: Math.ceil(requiredCoverageMs / 1000),
+    invalidReason,
+    rawPreview,
+    ready: windowSamples.length >= 2 && spanMs >= requiredCoverageMs,
+  };
 };
 
 export const buildStressPayloadFromBleWindow = (
   samples,
-  windowMs = REMOTE_PREDICTION_WINDOW_MS
+  windowMs = REMOTE_PREDICTION_WINDOW_MS,
+  options = {}
 ) => {
-  if (!Array.isArray(samples) || samples.length < 2) {
+  const {
+    minSamples = 2,
+    requireCoverage = true,
+    coverageRatio = 0.85,
+  } = options;
+
+  if (!Array.isArray(samples) || samples.length < minSamples) {
     return null;
   }
 
@@ -207,14 +300,14 @@ export const buildStressPayloadFromBleWindow = (
     (sample) => sample.timestampMs >= windowStartedAtCutoff
   );
 
-  if (windowSamples.length < 2) {
+  if (windowSamples.length < minSamples) {
     return null;
   }
 
   const windowStartedAt = windowSamples[0]?.timestampMs ?? 0;
   const windowEndedAt = windowSamples[windowSamples.length - 1]?.timestampMs ?? 0;
-  const minCoverageMs = windowMs * 0.85;
-  if (windowEndedAt - windowStartedAt < minCoverageMs) {
+  const minCoverageMs = windowMs * coverageRatio;
+  if (requireCoverage && windowEndedAt - windowStartedAt < minCoverageMs) {
     return null;
   }
 
@@ -255,9 +348,10 @@ export const buildBiometricWindowFromBleWindow = (
   samples,
   fallbackMetrics,
   userId,
-  windowMs = REMOTE_PREDICTION_WINDOW_MS
+  windowMs = REMOTE_PREDICTION_WINDOW_MS,
+  options = {}
 ) => {
-  const payload = buildStressPayloadFromBleWindow(samples, windowMs);
+  const payload = buildStressPayloadFromBleWindow(samples, windowMs, options);
   if (!payload) {
     return null;
   }

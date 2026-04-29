@@ -10,9 +10,12 @@ const corsHeaders = {
 const HF_SPACE_URL =
   Deno.env.get("HF_RF_SPACE_URL")?.replace(/\/$/, "") ??
   "https://kosanberg-model.hf.space";
+const HF_RUN_URL = `${HF_SPACE_URL}/gradio_api/run/predict`;
 const HF_SUBMIT_URL = `${HF_SPACE_URL}/gradio_api/call/predict`;
 const REQUEST_TIMEOUT_MS =
-  Number(Deno.env.get("HF_REQUEST_TIMEOUT_MS")) || 120000;
+  Number(Deno.env.get("HF_REQUEST_TIMEOUT_MS")) || 15000;
+const ALLOW_QUEUED_HF_FALLBACK =
+  Deno.env.get("ALLOW_HF_QUEUE_FALLBACK") === "true";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -41,6 +44,26 @@ const fetchWithTimeout = async (
   } finally {
     clearTimeout(timeoutId);
   }
+};
+
+const shouldUseQueuedHfFallback = (error: unknown) => {
+  if (!ALLOW_QUEUED_HF_FALLBACK) {
+    return false;
+  }
+
+  const message =
+    error instanceof Error
+      ? error.message.toLowerCase()
+      : String(error).toLowerCase();
+
+  return (
+    message.includes("does not accept direct") ||
+    message.includes("join the queue") ||
+    message.includes("direct hugging face endpoint unavailable") ||
+    message.includes("not found") ||
+    message.includes("failed to fetch") ||
+    message.includes("network request failed")
+  );
 };
 
 const getAuthenticatedUser = async (req: Request) => {
@@ -255,14 +278,47 @@ Deno.serve(async (req) => {
   }
 
   const values = inputSeries.map((series) => JSON.stringify(series ?? []));
+  const requestBody = JSON.stringify({ data: values });
 
   try {
+    try {
+      const runResponse = await fetchWithTimeout(HF_RUN_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: requestBody,
+      });
+
+      const runJson = await runResponse.json().catch(() => null);
+      if (!runResponse.ok) {
+        const detail =
+          typeof runJson?.detail === "string"
+            ? runJson.detail
+            : `HTTP ${runResponse.status}`;
+        throw new Error(`Direct Hugging Face endpoint unavailable: ${detail}`);
+      }
+
+      const prediction = mapHfResultToPrediction(runJson?.data ?? runJson);
+
+      if (prediction) {
+        return json(prediction);
+      }
+
+      throw new Error("Hugging Face returned no usable prediction.");
+    } catch (error) {
+      if (!shouldUseQueuedHfFallback(error)) {
+        throw error;
+      }
+      // Fall back to Gradio's queue API for older Space deployments.
+    }
+
     const submitResponse = await fetchWithTimeout(HF_SUBMIT_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ data: values }),
+      body: requestBody,
     });
 
     const submitJson = await submitResponse.json().catch(() => null);

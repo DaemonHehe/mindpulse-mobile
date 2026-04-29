@@ -50,6 +50,29 @@ const createWeeklyTemplate = () => {
   });
 };
 
+const formatPredictionConfidence = (prediction) => {
+  const fused = Number(prediction?.fused_score);
+  const rf = Number(prediction?.rf_confidence);
+  const lstm = Number(prediction?.lstm_confidence);
+  const values = [fused, rf, lstm];
+
+  if (!values.every(Number.isFinite)) {
+    return "Confidence --";
+  }
+
+  const sameScores =
+    Math.abs(fused - rf) < 0.005 && Math.abs(fused - lstm) < 0.005;
+
+  if (sameScores) {
+    return `RF confidence ${formatRatioAsPercent(rf, 0)}`;
+  }
+
+  return `Fused ${formatRatioAsPercent(fused, 0)} | RF ${formatRatioAsPercent(
+    rf,
+    0
+  )} | LSTM ${formatRatioAsPercent(lstm, 0)}`;
+};
+
 const buildStressInsights = (predictions) => {
   const weeklyTemplate = createWeeklyTemplate();
   const countsByDay = Object.fromEntries(
@@ -74,9 +97,6 @@ const buildStressInsights = (predictions) => {
     .slice(0, RECENT_STRESS_LIMIT)
     .map((prediction) => {
       const occurredAt = new Date(prediction.created_at);
-      const fusedScore = formatRatioAsPercent(prediction.fused_score, 0);
-      const rfScore = formatRatioAsPercent(prediction.rf_confidence, 0);
-      const lstmScore = formatRatioAsPercent(prediction.lstm_confidence, 0);
       return {
         id: String(prediction.id),
         title: occurredAt.toLocaleString(undefined, {
@@ -85,7 +105,7 @@ const buildStressInsights = (predictions) => {
           minute: "2-digit",
         }),
         result: prediction.final_state,
-        duration: `Fused ${fusedScore} • RF ${rfScore} • LSTM ${lstmScore}`,
+        duration: formatPredictionConfidence(prediction),
       };
     });
 

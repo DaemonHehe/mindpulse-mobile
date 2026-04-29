@@ -1,0 +1,16 @@
+flowchart LR
+    L[Location] --> OM[Open-Meteo API]
+    OM --> EC[Environmental Context]
+    EC --> PP[Physiological Prediction]
+    BLE[BLE Wearable / Latest Metrics] -.supports.-> PP
+    PP --> PC[Prompt Construction]
+    PC --> LLM[LLM]
+    LLM --> CM[Coaching Message]
+
+    classDef external fill:#f7f4ea,stroke:#7e6b45,color:#2b2417
+    classDef app fill:#eef2f1,stroke:#516566,color:#111827
+    classDef ai fill:#f1ebe5,stroke:#9b5f3b,color:#2b1d14
+
+    class L,OM external
+    class EC,PP,PC,CM app
+    class LLM ai

@@ -1,0 +1,49 @@
+sequenceDiagram
+    actor User
+    participant Dash as DashboardScreen
+    participant EnvHook as useEnvironmentalContext
+    participant EnvSvc as environment.js
+    participant Location as expo-location
+    participant Meteo as Open-Meteo APIs
+    participant Prompt as buildInsightPrompt
+    participant LlmHook as useLlmInsight
+    participant ORClient as openrouter.js
+    participant FnClient as functionClient.js
+    participant SA as Supabase Auth
+    participant Edge as openrouter-insight
+    participant OR as OpenRouter
+
+    User->>Dash: Open Dashboard
+    Dash->>EnvHook: load()
+    EnvHook->>EnvSvc: getEnvironmentalContext()
+    EnvSvc->>Location: request permission + current position
+    Location-->>EnvSvc: latitude, longitude, place
+    par Weather request
+        EnvSvc->>Meteo: /forecast
+    and Air quality request
+        EnvSvc->>Meteo: /air-quality
+    end
+    Meteo-->>EnvSvc: weather + AQI payloads
+    EnvSvc-->>EnvHook: envContext
+    EnvHook-->>Dash: location, weather, air data
+
+    Note over Dash: Dashboard already holds the latest physiological state from BLE/model prediction.
+
+    User->>Dash: Tap Generate Insight
+    Dash->>Prompt: buildInsightPrompt(envContext, insightEvents)
+    Prompt-->>Dash: prompt string
+    Dash->>LlmHook: generate(prompt)
+    LlmHook->>ORClient: askOpenRouter(system, user)
+    ORClient->>FnClient: invokeSupabaseFunction(openrouter-insight)
+    FnClient->>SA: getSession()
+    SA-->>FnClient: access token
+    FnClient->>Edge: POST prompt + x-supabase-auth
+    Edge->>SA: getUser(accessToken)
+    SA-->>Edge: authenticated user
+    Edge->>OR: chat/completions
+    OR-->>Edge: assistant content
+    Edge-->>FnClient: { content }
+    FnClient-->>ORClient: response JSON
+    ORClient-->>LlmHook: coaching text
+    LlmHook-->>Dash: llmResponse
+    Dash-->>User: Coaching message in Coach card

@@ -1,0 +1,144 @@
+classDiagram
+    class App {
+      +render()
+    }
+
+    class ThemeProvider {
+      +mode
+      +resolvedScheme
+      +setMode(mode)
+    }
+
+    class AuthProvider {
+      +session
+      +user
+      +profile
+      +signIn(credentials)
+      +signUp(payload)
+      +signOut()
+      +updateProfile(updates)
+      +deleteProfile()
+      +refreshProfile()
+    }
+
+    class BleProvider {
+      +bluetoothState
+      +connectedDevice
+      +latestReading
+      +connect()
+      +disconnect()
+      +clearError()
+    }
+
+    class DashboardScreen {
+      +openDetectModal()
+      +startDetectCountdown()
+      +runTimedStressDetection()
+      +handleGenerate()
+    }
+
+    class InsightsScreen {
+      +loadStressInsights()
+      +subscribeRealtime()
+    }
+
+    class InterventionScreen {
+      +startInterventionSession()
+      +handleComplete()
+    }
+
+    class SettingsScreen {
+      +handleSaveProfile()
+      +handleSignOut()
+      +handleDeleteProfile()
+    }
+
+    class useEnvironmentalContext {
+      +load()
+      +reload()
+    }
+
+    class useLlmInsight {
+      +generate(prompt)
+      +clear()
+    }
+
+    class buildInsightPrompt {
+      +buildInsightPrompt(envContext, events)
+    }
+
+    class db {
+      +ensureUserRecord(userId)
+      +getLatestDashboardSnapshot(userId)
+      +createBiometricSnapshot(window, prediction)
+      +getPredictionsInRange(userId, start, end)
+      +insertIntervention(data)
+      +updateIntervention(id, updates)
+    }
+
+    class predictStress {
+      +predictStress(payload)
+    }
+
+    class environment {
+      +getEnvironmentalContext()
+    }
+
+    class OpenRouterClient {
+      +askOpenRouter(payload)
+    }
+
+    class functionClient {
+      +invokeSupabaseFunction(config)
+    }
+
+    class supabase {
+      +auth.getSession()
+      +auth.getUser()
+      +from(table)
+      +channel(name)
+    }
+
+    class hf_stress_predict {
+      +getAuthenticatedUser(req)
+      +parseCompletionData(sseText)
+      +mapHfResultToPrediction(result)
+    }
+
+    class openrouter_insight {
+      +getAuthenticatedUser(req)
+      +fetchWithTimeout()
+      +extractAssistantContent()
+    }
+
+    App --> ThemeProvider
+    App --> AuthProvider
+    App --> BleProvider
+    App --> DashboardScreen
+    App --> InsightsScreen
+    App --> InterventionScreen
+    App --> SettingsScreen
+
+    DashboardScreen --> BleProvider
+    DashboardScreen --> useEnvironmentalContext
+    DashboardScreen --> useLlmInsight
+    DashboardScreen --> buildInsightPrompt
+    DashboardScreen --> predictStress
+    DashboardScreen --> db
+
+    InsightsScreen --> db
+    InsightsScreen --> useEnvironmentalContext
+    InsightsScreen --> supabase
+
+    InterventionScreen --> db
+    SettingsScreen --> AuthProvider
+
+    useEnvironmentalContext --> environment
+    useLlmInsight --> OpenRouterClient
+    OpenRouterClient --> functionClient
+    predictStress --> functionClient
+    db --> supabase
+    AuthProvider --> supabase
+    functionClient --> supabase
+    functionClient --> hf_stress_predict
+    functionClient --> openrouter_insight

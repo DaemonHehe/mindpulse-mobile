@@ -6,6 +6,8 @@ export const SENSOR_RANGES = {
   edaPeaks: { min: 0, max: 8 },
 };
 
+export const DEFAULT_SKIN_TEMP_C = 32.5;
+
 export const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 export const roundTo = (value, digits = 2) => {
@@ -21,33 +23,50 @@ export const toFiniteNumber = (value) => {
 export const isFiniteWithin = (value, min, max) =>
   Number.isFinite(value) && value >= min && value <= max;
 
-export const normalizeTemperatureCelsius = (value) => {
-  const parsed = toFiniteNumber(value);
-  if (!Number.isFinite(parsed)) return null;
-
-  let normalized = parsed;
-
-  // Kelvin to Celsius.
-  if (normalized >= 170 && normalized <= 400) {
-    normalized -= 273.15;
-  }
-
-  // Fahrenheit to Celsius fallback.
-  if (normalized >= 70 && normalized <= 130) {
-    normalized = (normalized - 32) * (5 / 9);
-  }
-
+const normalizeTemperatureCandidate = (value) => {
   if (
-    !isFiniteWithin(
-      normalized,
+    isFiniteWithin(
+      value,
       SENSOR_RANGES.tempC.min,
       SENSOR_RANGES.tempC.max
     )
   ) {
-    return null;
+    return value;
   }
 
-  return roundTo(normalized, 2);
+  return null;
+};
+
+export const normalizeTemperatureCelsius = (value) => {
+  const parsed = toFiniteNumber(value);
+  if (!Number.isFinite(parsed)) return null;
+
+  const direct = normalizeTemperatureCandidate(parsed);
+  if (direct !== null) {
+    return roundTo(direct, 2);
+  }
+
+  const kelvin = normalizeTemperatureCandidate(parsed - 273.15);
+  if (kelvin !== null) {
+    return roundTo(kelvin, 2);
+  }
+
+  const centiCelsius = normalizeTemperatureCandidate(parsed / 100);
+  if (centiCelsius !== null) {
+    return roundTo(centiCelsius, 2);
+  }
+
+  const deciCelsius = normalizeTemperatureCandidate(parsed / 10);
+  if (deciCelsius !== null) {
+    return roundTo(deciCelsius, 2);
+  }
+
+  const fahrenheit = normalizeTemperatureCandidate((parsed - 32) * (5 / 9));
+  if (fahrenheit !== null) {
+    return roundTo(fahrenheit, 2);
+  }
+
+  return null;
 };
 
 export const normalizeEdaPeaks = (value) => {

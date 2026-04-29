@@ -7,11 +7,13 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_URL =
+  Deno.env.get("OPENROUTER_URL") ??
+  "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_MODEL =
-  Deno.env.get("OPENROUTER_MODEL") ?? "stepfun/step-3.5-flash:free";
+  Deno.env.get("OPENROUTER_MODEL") ?? "minimax/minimax-01";
 const OPENROUTER_FALLBACK_MODEL =
-  Deno.env.get("OPENROUTER_FALLBACK_MODEL") ?? "openrouter/free";
+  Deno.env.get("OPENROUTER_FALLBACK_MODEL") ?? "openrouter/auto";
 const OPENROUTER_REFERER =
   Deno.env.get("OPENROUTER_REFERER") ?? "https://mindpulse.app/";
 const OPENROUTER_TITLE = Deno.env.get("OPENROUTER_TITLE") ?? "MindPulse";
@@ -23,11 +25,11 @@ const parseNumber = (value: string | undefined, fallback: number) => {
 
 const REQUEST_TIMEOUT_MS = parseNumber(
   Deno.env.get("OPENROUTER_TIMEOUT_MS"),
-  30000
+  12000
 );
 const REQUEST_RETRY_COUNT = parseNumber(
   Deno.env.get("OPENROUTER_RETRY_COUNT"),
-  1
+  0
 );
 const REQUEST_RETRY_BASE_MS = parseNumber(
   Deno.env.get("OPENROUTER_RETRY_BASE_MS"),
@@ -96,6 +98,17 @@ const parseErrorDetails = (data: Record<string, unknown>, status: number) => {
     retryable,
   };
 };
+
+const isModelEndpointUnavailable = (details: {
+  message: string;
+  code: string | null;
+}) =>
+  /no endpoints|no available endpoint|endpoint.*unavailable|model.*unavailable|not found/i.test(
+    details.message
+  ) ||
+  /no_endpoint|no-endpoint|model_not_found|model-not-found/i.test(
+    details.code ?? ""
+  );
 
 const extractTextFromContent = (content: unknown): string | null => {
   if (typeof content === "string") {
@@ -322,10 +335,13 @@ Deno.serve(async (req) => {
 
           const authFailure =
             response.status === 401 || response.status === 403;
-          if (
+          const tryNextModel =
             !authFailure &&
-            response.status >= 500 &&
-            candidateModel !== candidateModels[candidateModels.length - 1]
+            candidateModel !== candidateModels[candidateModels.length - 1] &&
+            (response.status >= 500 || isModelEndpointUnavailable(details));
+
+          if (
+            tryNextModel
           ) {
             break;
           }

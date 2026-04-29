@@ -24,6 +24,8 @@ import {
   buildStressPayloadFromBleWindow,
   createInitialData,
   DETECT_WINDOW_SEC,
+  getBleWindowStatus,
+  MANUAL_DETECTION_WINDOW_MS,
   mapSnapshotToData,
   mergeMetrics,
   REMOTE_PREDICTION_STRIDE_MS,
@@ -61,7 +63,9 @@ export default function DashboardScreen() {
   const [detectCountdownSec, setDetectCountdownSec] = useState(DETECT_WINDOW_SEC);
   const [detectRunning, setDetectRunning] = useState(false);
   const [detectMessage, setDetectMessage] = useState("");
+  const [detectResult, setDetectResult] = useState(null);
   const bleWindowSamplesRef = useRef([]);
+  const latestReadingRef = useRef(null);
   const predictionInFlightRef = useRef(false);
   const lastRemotePredictionAtRef = useRef(0);
   const detectTimerRef = useRef(null);
@@ -163,6 +167,7 @@ export default function DashboardScreen() {
     setDetectRunning(false);
     setSyncTestMessage("");
     setSyncTestLoading(false);
+    setDetectResult(null);
   }, [bleConnected]);
 
   useEffect(() => {
@@ -202,6 +207,8 @@ export default function DashboardScreen() {
   }, [user?.id]);
 
   useEffect(() => {
+    latestReadingRef.current = latestReading;
+
     if (!bleConnected || !latestReading?.metrics) {
       return;
     }
@@ -214,10 +221,16 @@ export default function DashboardScreen() {
     setDbError("");
     setData((prev) => {
       const metrics = mergeMetrics(prev.metrics, latestReading.metrics);
+      const previousPrediction = prev.ml_prediction;
+      const fallbackPrediction = buildPrediction(metrics, prev.metrics.temp_mean);
+      const mlPrediction =
+        previousPrediction?.state && previousPrediction.state !== "-"
+          ? previousPrediction
+          : fallbackPrediction;
       return {
         timestamp: latestReading.timestamp || new Date().toISOString(),
         metrics,
-        ml_prediction: buildPrediction(metrics, prev.metrics.temp_mean),
+        ml_prediction: mlPrediction,
       };
     });
   }, [bleConnected, latestReading]);
@@ -259,15 +272,24 @@ export default function DashboardScreen() {
           );
         }
 
+        const localPrediction = {
+          user_id: user.id,
+          rf_confidence: prediction.rf_confidence,
+          lstm_confidence: prediction.lstm_confidence,
+          fused_score: prediction.fused_score,
+          final_state: prediction.final_state,
+          created_at: new Date().toISOString(),
+        };
+        setData(
+          mapSnapshotToData({
+            biometricWindow,
+            prediction: localPrediction,
+          })
+        );
+
         const snapshot = await db.createBiometricSnapshot(
           biometricWindow,
-          {
-            user_id: user.id,
-            rf_confidence: prediction.rf_confidence,
-            lstm_confidence: prediction.lstm_confidence,
-            fused_score: prediction.fused_score,
-            final_state: prediction.final_state,
-          }
+          localPrediction
         );
 
         setDbError("");
@@ -299,6 +321,7 @@ export default function DashboardScreen() {
     }
     setDetectModalVisible(false);
     setDetectMessage("");
+    setDetectResult(null);
     setDetectCountdownSec(DETECT_WINDOW_SEC);
   };
 
@@ -313,12 +336,28 @@ export default function DashboardScreen() {
       }
 
       const windowSec = DETECT_WINDOW_SEC;
-      const windowMs = REMOTE_PREDICTION_WINDOW_MS;
+      const windowMs = MANUAL_DETECTION_WINDOW_MS;
       const samples = bleWindowSamplesRef.current;
-      const payload = buildStressPayloadFromBleWindow(samples, windowMs);
+      const manualDetectionOptions = {
+        minSamples: 4,
+        requireCoverage: false,
+      };
+      const payload = buildStressPayloadFromBleWindow(
+        samples,
+        windowMs,
+        manualDetectionOptions
+      );
       if (!payload) {
+        const windowStatus = getBleWindowStatus(
+          samples,
+          latestReadingRef.current,
+          windowMs
+        );
+        const detail = windowStatus.invalidReason
+          ? ` Last packet issue: ${windowStatus.invalidReason}`
+          : ` Accepted ${windowStatus.acceptedSamples} valid samples; need at least 4.`;
         throw new Error(
-          `Need at least ${windowSec}s of BLE data before detection. Keep the watch connected and retry.`
+          `Need a stable BLE window before detection.${detail}`
         );
       }
 
@@ -335,9 +374,10 @@ export default function DashboardScreen() {
 
       const biometricWindow = buildBiometricWindowFromBleWindow(
         samples,
-        latestReading?.metrics,
+        latestReadingRef.current?.metrics,
         user.id,
-        windowMs
+        windowMs,
+        manualDetectionOptions
       );
 
       if (!biometricWindow) {
@@ -346,19 +386,21 @@ export default function DashboardScreen() {
         );
       }
 
-      const snapshot = await db.createBiometricSnapshot(
-        biometricWindow,
-        {
-          user_id: user.id,
-          rf_confidence: rfConfidence,
-          lstm_confidence: lstmConfidence,
-          fused_score: fusedScore,
-          final_state: finalState,
-        }
+      const localPrediction = {
+        user_id: user.id,
+        rf_confidence: rfConfidence,
+        lstm_confidence: lstmConfidence,
+        fused_score: fusedScore,
+        final_state: finalState,
+        created_at: new Date().toISOString(),
+      };
+      setData(
+        mapSnapshotToData({
+          biometricWindow,
+          prediction: localPrediction,
+        })
       );
-
       setDbError("");
-      setData(mapSnapshotToData(snapshot));
       setSyncTestMessage(
         `Detect stress (${windowSec}s) complete: ${finalState} (${formatRatioAsPercent(
           fusedScore
@@ -367,8 +409,30 @@ export default function DashboardScreen() {
       setDetectMessage(
         `Detection complete: ${finalState} (${formatRatioAsPercent(fusedScore)}).`
       );
+      setDetectResult({
+        state: finalState,
+        confidence: fusedScore,
+        timestamp: biometricWindow.timestamp,
+      });
+
+      try {
+        const snapshot = await db.createBiometricSnapshot(
+          biometricWindow,
+          localPrediction
+        );
+
+        setDbError("");
+        setData(mapSnapshotToData(snapshot));
+      } catch (persistError) {
+        setDbError(
+          `Detection complete, but failed to save: ${
+            persistError?.message || "database sync failed"
+          }`
+        );
+      }
     } catch (error) {
       const message = error?.message || "Stress detection failed.";
+      setDetectResult(null);
       setDbError(message);
       setDetectMessage(message);
     } finally {
@@ -387,8 +451,20 @@ export default function DashboardScreen() {
     stopDetectTimer();
     setDbError("");
     setSyncTestMessage("");
+    setDetectResult(null);
     setDetectCountdownSec(windowSec);
-    setDetectMessage(`Collecting BLE data for ${windowSec} seconds...`);
+    const windowStatus = getBleWindowStatus(
+      bleWindowSamplesRef.current,
+      latestReadingRef.current,
+      MANUAL_DETECTION_WINDOW_MS
+    );
+    const statusDetail =
+      windowStatus.acceptedSamples === 0 && windowStatus.invalidReason
+        ? ` ${windowStatus.invalidReason}`
+        : "";
+    setDetectMessage(
+      `Collecting BLE data for ${windowSec} seconds... accepted ${windowStatus.acceptedSamples} samples covering ${windowStatus.spanSeconds}s.${statusDetail}`
+    );
     setDetectRunning(true);
 
     detectTimerRef.current = setInterval(() => {
@@ -399,7 +475,22 @@ export default function DashboardScreen() {
           }, 0);
           return 0;
         }
-        return previous - 1;
+        const nextValue = previous - 1;
+        if (nextValue % 5 === 0) {
+          const windowStatus = getBleWindowStatus(
+            bleWindowSamplesRef.current,
+            latestReadingRef.current,
+            MANUAL_DETECTION_WINDOW_MS
+          );
+          const statusDetail =
+            windowStatus.acceptedSamples === 0 && windowStatus.invalidReason
+              ? ` ${windowStatus.invalidReason}`
+              : "";
+          setDetectMessage(
+            `Collecting BLE data... ${nextValue}s left. Accepted ${windowStatus.acceptedSamples} samples covering ${windowStatus.spanSeconds}s.${statusDetail}`
+          );
+        }
+        return nextValue;
       });
     }, 1000);
   };
@@ -407,6 +498,7 @@ export default function DashboardScreen() {
   const cancelDetectCountdown = () => {
     stopDetectTimer();
     setDetectRunning(false);
+    setDetectResult(null);
     setDetectMessage("Detection cancelled.");
     setDetectCountdownSec(DETECT_WINDOW_SEC);
   };
@@ -415,6 +507,7 @@ export default function DashboardScreen() {
     setDetectModalVisible(true);
     setDetectCountdownSec(DETECT_WINDOW_SEC);
     setDetectMessage("");
+    setDetectResult(null);
   };
 
   const formatMetricWithUnit = (value, unit, digits = 0) => {
@@ -539,6 +632,8 @@ export default function DashboardScreen() {
     typeof data.ml_prediction.state === "string" && data.ml_prediction.state
       ? data.ml_prediction.state
       : "-";
+  const hasDetectResult = Boolean(detectResult?.state);
+  const detectResultIsStressed = detectResult?.state === "Stressed";
   const heartRateText = formatMetricWithUnit(data.metrics.hr_mean, "BPM");
   const temperatureText = formatMetricWithUnit(data.metrics.temp_mean, "C", 1);
   const hrvText = formatMetricWithUnit(data.metrics.hrv_sdnn, "", 1).replace(
@@ -740,21 +835,58 @@ export default function DashboardScreen() {
               Keep your watch connected.
             </Text>
 
-            <Text style={styles.timerLabel}>Countdown</Text>
-            <Animated.Text
-              style={[
-                styles.timerValue,
-                detectRunning && styles.timerValueActive,
-                {
-                  transform: [{ scale: timerScale }],
-                  opacity: timerOpacity,
-                },
-              ]}
-            >
-              {`${detectCountdownSec}s`}
-            </Animated.Text>
+            {hasDetectResult ? (
+              <View
+                style={[
+                  styles.detectResultPanel,
+                  detectResultIsStressed
+                    ? styles.detectResultStressed
+                    : styles.detectResultRelaxed,
+                ]}
+              >
+                <Text style={styles.detectResultLabel}>Result</Text>
+                <Text
+                  style={[
+                    styles.detectResultValue,
+                    detectResultIsStressed
+                      ? styles.detectResultValueStressed
+                      : styles.detectResultValueRelaxed,
+                  ]}
+                >
+                  {detectResult.state}
+                </Text>
+                <Text style={styles.detectResultMeta}>
+                  Confidence {formatRatioAsPercent(detectResult.confidence)}
+                </Text>
+                <Text style={styles.detectResultMeta}>
+                  Completed {formatTime(detectResult.timestamp)}
+                </Text>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.timerLabel}>
+                  {detectRunning && detectCountdownSec === 0
+                    ? "Inference"
+                    : "Countdown"}
+                </Text>
+                <Animated.Text
+                  style={[
+                    styles.timerValue,
+                    detectRunning && styles.timerValueActive,
+                    {
+                      transform: [{ scale: timerScale }],
+                      opacity: timerOpacity,
+                    },
+                  ]}
+                >
+                  {detectRunning && detectCountdownSec === 0
+                    ? "..."
+                    : `${detectCountdownSec}s`}
+                </Animated.Text>
+              </>
+            )}
 
-            {detectMessage ? (
+            {detectMessage && !hasDetectResult ? (
               <Text
                 style={[
                   styles.detectMessage,
@@ -769,13 +901,19 @@ export default function DashboardScreen() {
               <Button variant="destructive" onPress={cancelDetectCountdown}>
                 Cancel
               </Button>
+            ) : hasDetectResult ? (
+              <Button onPress={closeDetectModal}>Done</Button>
             ) : (
-              <Button onPress={startDetectCountdown}>Start Detection (60s)</Button>
+              <Button onPress={startDetectCountdown}>
+                {`Start Detection (${DETECT_WINDOW_SEC}s)`}
+              </Button>
             )}
 
-            <Button variant="outline" size="sm" onPress={closeDetectModal}>
-              Close
-            </Button>
+            {!hasDetectResult ? (
+              <Button variant="outline" size="sm" onPress={closeDetectModal}>
+                Close
+              </Button>
+            ) : null}
           </Card>
         </View>
       </Modal>
@@ -986,5 +1124,40 @@ const createStyles = (colors) =>
       backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
+    },
+    detectResultPanel: {
+      borderRadius: radius.md,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.md,
+      borderWidth: 1,
+      marginVertical: spacing.xs,
+    },
+    detectResultStressed: {
+      backgroundColor: colors.stressedCard,
+      borderColor: colors.warning,
+    },
+    detectResultRelaxed: {
+      backgroundColor: colors.calmCard,
+      borderColor: colors.accent,
+    },
+    detectResultLabel: {
+      ...typography.overline,
+      color: colors.textSecondary,
+      marginBottom: spacing.xs,
+    },
+    detectResultValue: {
+      ...typography.display,
+      marginBottom: spacing.xs,
+    },
+    detectResultValueStressed: {
+      color: colors.warning,
+    },
+    detectResultValueRelaxed: {
+      color: colors.accent,
+    },
+    detectResultMeta: {
+      ...typography.caption,
+      color: colors.textSecondary,
+      marginTop: spacing.xxs,
     },
   });
